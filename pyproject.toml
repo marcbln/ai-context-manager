@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ai-context-manager"
+version = "0.1.0"
+description = "Manage and export file selections as AI context"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = [
+    "typer[all]>=0.9.0",
+    "rich>=13.7.0",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0.0",
+    "pathspec>=0.12.0",  # For gitignore-style patterns
+]
+
+[project.scripts]
+aicontext = "ai_context_manager.cli:app"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+    "black>=24.0.0",
+    "mypy>=1.8.0",
+    "ruff>=0.3.0",
+]
