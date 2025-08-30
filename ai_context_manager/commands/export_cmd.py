@@ -1,238 +1,230 @@
-"""Export context to various formats command."""
+"""Export command for AI Context Manager."""
+import json
+import xml.etree.ElementTree as ET
+from pathlib import Path
+from typing import List, Optional
+
 import typer
 import yaml
-import json
-from pathlib import Path
-from typing import Optional, List
-import os
-from datetime import datetime
+from typing_extensions import Annotated
 
-from ..config import get_config_dir
+from ai_context_manager.core.profile import Profile
+from ai_context_manager.utils.file_utils import collect_files, format_file_size
+from ai_context_manager.utils.token_counter import count_tokens
 
-app = typer.Typer(help="Export context to various formats")
+app = typer.Typer(help="Export code context for AI analysis")
 
-def load_context():
-    """Load the current context from YAML file."""
-    config_dir = get_config_dir()
-    context_file = config_dir / "context.yaml"
-    
-    if not context_file.exists():
-        return {"files": []}
-    
-    with open(context_file, 'r') as f:
-        return yaml.safe_load(f) or {"files": []}
 
-def read_file_content(file_path):
-    """Read and return file content."""
+@app.command("export")
+def export_context(
+    path: Annotated[Path, typer.Option("--path", "-p", help="Path to analyze")],
+    output: Annotated[Optional[Path], typer.Option("--output", "-o", help="Output file path")] = None,
+    format: Annotated[str, typer.Option("--format", "-f", help="Output format (json, markdown, xml, yaml)")] = "json",
+    include: Annotated[Optional[str], typer.Option("--include", "-i", help="Include patterns (comma-separated)")] = None,
+    exclude: Annotated[Optional[str], typer.Option("--exclude", "-e", help="Exclude patterns (comma-separated)")] = None,
+    max_size: Annotated[int, typer.Option("--max-size", help="Maximum file size in bytes")] = 102400,
+    binary: Annotated[bool, typer.Option("--binary/--no-binary", help="Include binary files")] = False,
+    token_limit: Annotated[Optional[int], typer.Option("--token-limit", help="Maximum tokens to include")] = None,
+    profile: Annotated[Optional[str], typer.Option("--profile", help="Profile name to use")] = None,
+    profiles_dir: Annotated[Path, typer.Option("--profiles-dir", help="Directory containing profiles")] = Path.home() / ".ai-context-manager" / "profiles"
+) -> None:
+    """Export code context for AI analysis."""
+    if not path.exists():
+        typer.echo(f"Error: Path '{path}' does not exist", err=True)
+        raise typer.Exit(1)
+
+    # Load profile if specified
+    profile_config = None
+    if profile:
+        profile_path = profiles_dir / f"{profile}.json"
+        if not profile_path.exists():
+            typer.echo(f"Error: Profile '{profile}' not found at {profile_path}", err=True)
+            raise typer.Exit(1)
+        
+        try:
+            profile_config = Profile.from_file(profile_path)
+        except Exception as e:
+            typer.echo(f"Error loading profile: {e}", err=True)
+            raise typer.Exit(1)
+
+    # Apply profile settings if available
+    if profile_config:
+        include_patterns = profile_config.include_patterns or ["*"]
+        exclude_patterns = profile_config.exclude_patterns or []
+        max_file_size = profile_config.max_file_size or max_size
+        include_binary = profile_config.include_binary or binary
+        output_format = profile_config.output_format or format
+        output_file = output or Path(profile_config.output_file or "ai-context.json")
+    else:
+        include_patterns = include.split(",") if include else ["*"]
+        exclude_patterns = exclude.split(",") if exclude else []
+        max_file_size = max_size
+        include_binary = binary
+        output_format = format
+        output_file = output or Path(f"ai-context.{format}")
+
+    # Collect files
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            return f.read()
+        files = collect_files(
+            path,
+            include_patterns=include_patterns,
+            exclude_patterns=exclude_patterns,
+            max_file_size=max_file_size,
+            include_binary=include_binary
+        )
     except Exception as e:
-        return f"Error reading file: {e}"
+        typer.echo(f"Error collecting files: {e}", err=True)
+        raise typer.Exit(1)
 
-def load_profile(profile_name: str) -> Optional[dict]:
-    """Load export profile configuration."""
-    if not profile_name:
-        return None
-    
-    from ..commands.profile_cmd import load_profile as load_profile_config
-    return load_profile_config(profile_name)
-
-def filter_files_by_profile(files: List[str], profile: Optional[dict]) -> List[str]:
-    """Filter files based on profile settings."""
-    if not profile:
-        return files
-    
-    filtered_files = []
-    max_size = profile.get('max_file_size')
-    extensions = profile.get('file_extensions')
-    
-    for file_path in files:
-        # Check file extension filter
-        if extensions:
-            file_ext = Path(file_path).suffix.lower()
-            if file_ext not in [f".{ext.lower()}" for ext in extensions]:
-                continue
+    # Apply token limit if specified
+    if token_limit:
+        filtered_files = []
+        total_tokens = 0
         
-        # Check file size filter
-        if max_size and os.path.exists(file_path):
+        for file_info in files:
             try:
-                if os.path.getsize(file_path) > max_size:
-                    continue
-            except OSError:
+                tokens = count_tokens(file_info["content"], file_info["path"])
+                if total_tokens + tokens <= token_limit:
+                    filtered_files.append(file_info)
+                    total_tokens += tokens
+                else:
+                    break
+            except Exception:
+                # Skip files that can't be tokenized
                 continue
         
-        filtered_files.append(file_path)
-    
-    return filtered_files
+        files = filtered_files
 
-@app.command()
-def markdown(
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path"),
-    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Export profile to use"),
-):
-    """Export context as markdown."""
-    context = load_context()
-    files = context.get("files", [])
-    
-    if not files:
-        typer.echo("No files in context to export")
-        return
-    
-    # Load and apply profile
-    profile_config = load_profile(profile)
-    if profile_config:
-        files = filter_files_by_profile(files, profile_config)
-        typer.echo(f"Using profile: {profile}")
-    
-    if not files:
-        typer.echo("No files match profile criteria")
-        return
-    
-    # Check if metadata should be included
-    include_metadata = True
-    if profile_config:
-        include_metadata = profile_config.get('include_metadata', True)
-    
-    # Generate markdown content
-    markdown_content = f"# Context Export\n\n"
-    
-    if include_metadata:
-        markdown_content += f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-        markdown_content += f"Total files: {len(files)}\n\n"
-        markdown_content += "---\n\n"
-    
-    for file_path in files:
-        if os.path.exists(file_path):
-            content = read_file_content(file_path)
-            markdown_content += f"## {file_path}\n\n"
-            markdown_content += f"```{Path(file_path).suffix[1:] or 'text'}\n"
-            markdown_content += f"{content}\n"
-            markdown_content += "```\n\n"
+    # Prepare export data
+    export_data = {
+        "metadata": {
+            "source_path": str(path),
+            "total_files": len(files),
+            "total_size": sum(f["size"] for f in files),
+            "format": output_format,
+            "generated_at": str(typer.echo)
+        },
+        "files": files
+    }
+
+    # Write output in specified format
+    try:
+        if output_format == "json":
+            with open(output_file, "w") as f:
+                json.dump(export_data, f, indent=2)
+        elif output_format == "markdown":
+            _write_markdown(output_file, export_data)
+        elif output_format == "xml":
+            _write_xml(output_file, export_data)
+        elif output_format == "yaml":
+            with open(output_file, "w") as f:
+                yaml.dump(export_data, f, default_flow_style=False)
         else:
-            markdown_content += f"## {file_path}\n\n"
-            markdown_content += "*File not found*\n\n"
-    
-    if output:
-        with open(output, 'w', encoding='utf-8') as f:
-            f.write(markdown_content)
-        typer.echo(f"Exported to {output}")
-    else:
-        typer.echo(markdown_content)
+            typer.echo(f"Error: Unsupported format '{output_format}'", err=True)
+            raise typer.Exit(1)
 
-@app.command()
-def xml(
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path"),
-    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Export profile to use"),
-):
-    """Export context as XML."""
-    context = load_context()
-    files = context.get("files", [])
-    
-    if not files:
-        typer.echo("No files in context to export")
-        return
-    
-    # Load and apply profile
-    profile_config = load_profile(profile)
-    if profile_config:
-        files = filter_files_by_profile(files, profile_config)
-        typer.echo(f"Using profile: {profile}")
-    
-    if not files:
-        typer.echo("No files match profile criteria")
-        return
-    
-    # Check if metadata should be included
-    include_metadata = True
-    if profile_config:
-        include_metadata = profile_config.get('include_metadata', True)
-    
-    # Generate XML content
-    xml_content = '<?xml version="1.0" encoding="UTF-8"?>\n'
-    xml_content += '<context>\n'
-    
-    if include_metadata:
-        xml_content += f'  <metadata>\n'
-        xml_content += f'    <generated>{datetime.now().isoformat()}</generated>\n'
-        xml_content += f'    <total_files>{len(files)}</total_files>\n'
-        xml_content += f'  </metadata>\n'
-    
-    for file_path in files:
-        xml_content += f'  <file path="{file_path}">\n'
-        if os.path.exists(file_path):
-            content = read_file_content(file_path)
-            xml_content += f'    <content><![CDATA[{content}]]></content>\n'
-        else:
-            xml_content += '    <content>File not found</content>\n'
-        xml_content += '  </file>\n'
-    
-    xml_content += '</context>\n'
-    
-    if output:
-        with open(output, 'w', encoding='utf-8') as f:
-            f.write(xml_content)
-        typer.echo(f"Exported to {output}")
-    else:
-        typer.echo(xml_content)
-
-@app.command()
-def json(
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path"),
-    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Export profile to use"),
-):
-    """Export context as JSON."""
-    context = load_context()
-    files = context.get("files", [])
-    
-    if not files:
-        typer.echo("No files in context to export")
-        return
-    
-    # Load and apply profile
-    profile_config = load_profile(profile)
-    if profile_config:
-        files = filter_files_by_profile(files, profile_config)
-        typer.echo(f"Using profile: {profile}")
-    
-    if not files:
-        typer.echo("No files match profile criteria")
-        return
-    
-    # Check if metadata should be included
-    include_metadata = True
-    if profile_config:
-        include_metadata = profile_config.get('include_metadata', True)
-    
-    # Generate JSON content
-    export_data = {"files": []}
-    
-    if include_metadata:
-        export_data["metadata"] = {
-            "generated": datetime.now().isoformat(),
-            "total_files": len(files)
-        }
-    
-    for file_path in files:
-        file_data = {
-            "path": file_path,
-            "exists": os.path.exists(file_path)
-        }
+        typer.echo(f"Exported {len(files)} files to {output_file}")
         
-        if file_data["exists"]:
-            file_data["content"] = read_file_content(file_path)
-            file_data["size"] = os.path.getsize(file_path)
-        else:
-            file_data["content"] = None
-            file_data["size"] = 0
+    except Exception as e:
+        typer.echo(f"Error writing output: {e}", err=True)
+        raise typer.Exit(1)
+
+
+def _write_markdown(output_file: Path, export_data: dict) -> None:
+    """Write export data in markdown format."""
+    with open(output_file, "w") as f:
+        f.write("# AI Context Export\n\n")
+        f.write(f"**Source:** {export_data['metadata']['source_path']}\n")
+        f.write(f"**Files:** {export_data['metadata']['total_files']}\n")
+        f.write(f"**Total Size:** {format_file_size(export_data['metadata']['total_size'])}\n\n")
         
-        export_data["files"].append(file_data)
+        for file_info in export_data["files"]:
+            f.write(f"## {file_info['path']}\n\n")
+            f.write(f"- **Size:** {format_file_size(file_info['size'])}\n")
+            f.write(f"- **Type:** {file_info['type']}\n\n")
+            
+            if file_info["type"] == "text":
+                lang = _get_language_from_extension(file_info["path"])
+                f.write(f"```{lang}\n")
+                f.write(file_info["content"])
+                f.write("\n```\n\n")
+            else:
+                f.write(f"*Binary file - {file_info['size']} bytes*\n\n")
+
+
+def _write_xml(output_file: Path, export_data: dict) -> None:
+    """Write export data in XML format."""
+    root = ET.Element("export")
     
-    json_content = json.dumps(export_data, indent=2)
+    metadata = ET.SubElement(root, "metadata")
+    ET.SubElement(metadata, "source_path").text = export_data["metadata"]["source_path"]
+    ET.SubElement(metadata, "total_files").text = str(export_data["metadata"]["total_files"])
+    ET.SubElement(metadata, "total_size").text = str(export_data["metadata"]["total_size"])
+    ET.SubElement(metadata, "format").text = export_data["metadata"]["format"]
     
-    if output:
-        with open(output, 'w', encoding='utf-8') as f:
-            f.write(json_content)
-        typer.echo(f"Exported to {output}")
-    else:
-        typer.echo(json_content)
+    files = ET.SubElement(root, "files")
+    for file_info in export_data["files"]:
+        file_elem = ET.SubElement(files, "file")
+        ET.SubElement(file_elem, "path").text = file_info["path"]
+        ET.SubElement(file_elem, "size").text = str(file_info["size"])
+        ET.SubElement(file_elem, "type").text = file_info["type"]
+        if file_info["type"] == "text":
+            content = ET.SubElement(file_elem, "content")
+            content.text = file_info["content"]
+    
+    tree = ET.ElementTree(root)
+    tree.write(output_file, encoding="utf-8", xml_declaration=True)
+
+
+def _get_language_from_extension(file_path: str) -> str:
+    """Get language identifier from file extension."""
+    extension_map = {
+        ".py": "python",
+        ".js": "javascript",
+        ".ts": "typescript",
+        ".java": "java",
+        ".cpp": "cpp",
+        ".c": "c",
+        ".h": "c",
+        ".hpp": "cpp",
+        ".cs": "csharp",
+        ".php": "php",
+        ".rb": "ruby",
+        ".go": "go",
+        ".rs": "rust",
+        ".swift": "swift",
+        ".kt": "kotlin",
+        ".scala": "scala",
+        ".html": "html",
+        ".css": "css",
+        ".scss": "scss",
+        ".sass": "sass",
+        ".less": "less",
+        ".xml": "xml",
+        ".json": "json",
+        ".yaml": "yaml",
+        ".yml": "yaml",
+        ".toml": "toml",
+        ".ini": "ini",
+        ".cfg": "ini",
+        ".conf": "ini",
+        ".sh": "bash",
+        ".bash": "bash",
+        ".zsh": "zsh",
+        ".fish": "fish",
+        ".ps1": "powershell",
+        ".sql": "sql",
+        ".md": "markdown",
+        ".dockerfile": "dockerfile",
+        ".jsx": "jsx",
+        ".tsx": "tsx",
+        ".vue": "vue",
+        ".svelte": "svelte",
+    }
+    
+    ext = Path(file_path).suffix.lower()
+    return extension_map.get(ext, "")
+
+
+if __name__ == "__main__":
+    app()
