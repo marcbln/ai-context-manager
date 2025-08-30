@@ -16,7 +16,7 @@ source .venv/bin/activate
 
 ### 1.2 Create Project Structure
 ```
-ai_context_manager/
+/home/marc/devel/ai-context-manager/
 ├── .venv/
 ├── pyproject.toml
 ├── README.md
