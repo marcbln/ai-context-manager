@@ -1,0 +1,11 @@
+include README.md
+include LICENSE
+include requirements.txt
+include MANIFEST.in
+recursive-include ai_context_manager *.py
+recursive-include tests *.py
+recursive-include examples *.py
+recursive-include docs *.md
+global-exclude *.pyc
+global-exclude __pycache__
+global-exclude .DS_Store

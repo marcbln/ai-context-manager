@@ -1,39 +1,33 @@
-"""CLI interface for AI Context Manager."""
+"""Main CLI entry point for AI Context Manager."""
 
 import typer
-from typing import Optional
-from pathlib import Path
+from rich.console import Console
 
-from ai_context_manager.commands import add_cmd, list_cmd, remove_cmd, export_cmd, profile_cmd
+from ai_context_manager.commands.export_cmd import app as export_app
+from ai_context_manager.commands.profile_cmd import app as profile_app
 
 app = typer.Typer(
-    name="aicontext",
-    help="Manage and export file selections as AI context",
-    no_args_is_help=True,
+    name="ai-context-manager",
+    help="AI Context Manager - Export codebases for AI analysis",
+    add_completion=False,
 )
+console = Console()
 
 # Add subcommands
-app.add_typer(add_cmd.app, name="add", help="Add files to context")
-app.add_typer(list_cmd.app, name="list", help="List files in context")
-app.add_typer(remove_cmd.app, name="remove", help="Remove files from context")
-app.add_typer(export_cmd.app, name="export", help="Export context to various formats")
-app.add_typer(profile_cmd.app, name="profile", help="Manage export profiles")
+app.add_typer(export_app, name="export", help="Export files to AI context format")
+app.add_typer(profile_app, name="profile", help="Manage export profiles")
 
 
 @app.command()
-def init(
-    config_dir: Optional[Path] = typer.Option(
-        None,
-        "--config-dir",
-        help="Directory to store configuration files",
-    )
-):
-    """Initialize the AI context manager configuration."""
-    from ai_context_manager.config import Config
-    
-    config = Config(config_dir)
-    config.init()
-    typer.echo(f"Initialized AI context manager in {config.config_dir}")
+def version():
+    """Show version information."""
+    console.print("AI Context Manager v0.1.0")
+
+
+@app.callback()
+def main():
+    """AI Context Manager - Export codebases for AI analysis."""
+    pass
 
 
 if __name__ == "__main__":

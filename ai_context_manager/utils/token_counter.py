@@ -1,249 +1,191 @@
 """Token counting utilities for AI Context Manager."""
 
 import re
-from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Optional
 
 
-class TokenCounter:
-    """Token counter for estimating token usage in text files."""
+def count_tokens(text: str, model: str = "gpt-4") -> int:
+    """
+    Estimate the number of tokens in a text string.
     
-    # Approximate token counts for common languages
-    LANGUAGE_TOKEN_RATES = {
-        'python': 0.7,
-        'javascript': 0.8,
-        'typescript': 0.8,
-        'java': 0.7,
-        'c': 0.6,
-        'cpp': 0.7,
-        'csharp': 0.7,
-        'go': 0.7,
-        'rust': 0.7,
-        'php': 0.8,
-        'ruby': 0.8,
-        'html': 0.9,
-        'css': 0.9,
-        'json': 0.5,
-        'yaml': 0.5,
-        'xml': 0.9,
-        'markdown': 0.8,
-        'text': 0.75,
+    This is a rough approximation using the rule of thumb that:
+    - 1 token ≈ 4 characters for English text
+    - 1 token ≈ ¾ words
+    
+    Args:
+        text: The text to count tokens for
+        model: The AI model to estimate for (currently only used for logging)
+    
+    Returns:
+        Estimated number of tokens
+    """
+    if not text:
+        return 0
+    
+    # Simple approximation: 1 token ≈ 4 characters
+    char_count = len(text)
+    token_estimate = char_count // 4
+    
+    # More refined approximation for code
+    if _is_likely_code(text):
+        # Code tends to have more tokens due to symbols and structure
+        token_estimate = int(char_count * 0.35)  # ~2.85 chars per token
+    
+    # Count words as additional check
+    words = re.findall(r'\b\w+\b', text)
+    word_count = len(words)
+    word_based_estimate = int(word_count * 1.3)  # ~0.75 words per token
+    
+    # Take the average of character and word estimates
+    final_estimate = max(token_estimate, word_based_estimate)
+    
+    return max(1, int(final_estimate))
+
+
+def _is_likely_code(text: str) -> bool:
+    """Determine if text is likely to be source code."""
+    code_indicators = [
+        r'\b(def|function|class|import|from|const|let|var)\b',
+        r'[{}()\[\];]',
+        r'//|/\*|#|"""|\'\'\'',
+        r'\b(if|else|for|while|return|try|catch)\b',
+    ]
+    
+    indicator_count = 0
+    for pattern in code_indicators:
+        if re.search(pattern, text):
+            indicator_count += 1
+    
+    # If we find multiple code indicators, it's probably code
+    return indicator_count >= 2
+
+
+def format_token_count(tokens: int) -> str:
+    """Format token count for human readability."""
+    if tokens < 1000:
+        return f"{tokens} tokens"
+    elif tokens < 1000000:
+        return f"{tokens / 1000:.1f}k tokens"
+    else:
+        return f"{tokens / 1000000:.1f}M tokens"
+
+
+def get_token_limits(model: str = "gpt-4") -> dict:
+    """Get token limits for different AI models."""
+    limits = {
+        "gpt-3.5-turbo": {
+            "max_input": 4096,
+            "max_output": 4096,
+            "max_total": 4096
+        },
+        "gpt-4": {
+            "max_input": 8192,
+            "max_output": 8192,
+            "max_total": 8192
+        },
+        "gpt-4-turbo": {
+            "max_input": 128000,
+            "max_output": 4096,
+            "max_total": 128000
+        },
+        "gpt-4o": {
+            "max_input": 128000,
+            "max_output": 4096,
+            "max_total": 128000
+        },
+        "claude-3-haiku": {
+            "max_input": 200000,
+            "max_output": 4096,
+            "max_total": 200000
+        },
+        "claude-3-sonnet": {
+            "max_input": 200000,
+            "max_output": 4096,
+            "max_total": 200000
+        },
+        "claude-3-opus": {
+            "max_input": 200000,
+            "max_output": 4096,
+            "max_total": 200000
+        },
+        "claude-3.5-sonnet": {
+            "max_input": 200000,
+            "max_output": 8192,
+            "max_total": 200000
+        },
     }
     
-    def __init__(self):
-        """Initialize token counter."""
-        pass
+    return limits.get(model, limits["gpt-4"])
+
+
+def check_token_limits(tokens: int, model: str = "gpt-4") -> dict:
+    """Check if token count is within model limits."""
+    limits = get_token_limits(model)
     
-    def count_tokens(self, text: str, language: str = 'text') -> int:
-        """Count tokens in text using language-specific rules.
-        
-        Args:
-            text: Text to count tokens for.
-            language: Language identifier for token rate adjustment.
-            
-        Returns:
-            Estimated token count.
-        """
-        if not text:
-            return 0
-        
-        # Clean text
-        text = text.strip()
-        if not text:
-            return 0
-        
-        # Split into words and count
-        words = re.findall(r'\b\w+\b', text)
-        word_count = len(words)
-        
-        # Count special characters and symbols
-        symbol_count = len(re.findall(r'[^\w\s]', text))
-        
-        # Count numbers
-        number_count = len(re.findall(r'\b\d+\b', text))
-        
-        # Base token count
-        base_tokens = word_count + symbol_count + (number_count * 0.5)
-        
-        # Apply language-specific rate
-        rate = self.LANGUAGE_TOKEN_RATES.get(language.lower(), 0.75)
-        estimated_tokens = int(base_tokens * rate)
-        
-        return max(1, estimated_tokens)
+    is_within_limits = tokens <= limits["max_input"]
+    percentage = (tokens / limits["max_input"]) * 100
     
-    def count_file_tokens(self, file_path: Union[str, Path], language: Optional[str] = None) -> int:
-        """Count tokens in a file.
-        
-        Args:
-            file_path: Path to the file.
-            language: Language identifier (auto-detected if None).
-            
-        Returns:
-            Estimated token count for the file.
-        """
-        file_path = Path(file_path)
-        
-        if not file_path.exists() or not file_path.is_file():
-            return 0
-        
-        try:
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                content = f.read()
-        except (OSError, UnicodeDecodeError):
-            return 0
-        
-        if language is None:
-            language = self.detect_language(file_path)
-        
-        return self.count_tokens(content, language)
+    return {
+        "is_within_limits": is_within_limits,
+        "percentage": percentage,
+        "tokens": tokens,
+        "limit": limits["max_input"],
+        "model": model,
+        "warning": f"{percentage:.1f}% of {model} limit" if not is_within_limits else None
+    }
+
+
+def estimate_context_size(files: list, base_path: str = None) -> dict:
+    """
+    Estimate the total token count for a list of files.
     
-    def count_directory_tokens(self, directory: Union[str, Path], 
-                             include_patterns: List[str] = None,
-                             exclude_patterns: List[str] = None) -> Dict[str, int]:
-        """Count tokens for all files in a directory.
-        
-        Args:
-            directory: Directory to scan.
-            include_patterns: File patterns to include.
-            exclude_patterns: File patterns to exclude.
-            
-        Returns:
-            Dictionary mapping file paths to token counts.
-        """
-        from .file_utils import collect_files
-        
-        directory = Path(directory)
-        if not directory.exists() or not directory.is_dir():
-            return {}
-        
-        token_counts = {}
-        
-        # Collect all files
-        files = collect_files(
-            directory,
-            include_patterns=include_patterns,
-            exclude_patterns=exclude_patterns,
-            recursive=True
-        )
-        
-        for file_path in files:
-            tokens = self.count_file_tokens(file_path)
-            if tokens > 0:
-                token_counts[str(file_path)] = tokens
-        
-        return token_counts
+    Args:
+        files: List of file paths or file objects
+        base_path: Base directory path for relative paths
     
-    def detect_language(self, file_path: Union[str, Path]) -> str:
-        """Detect programming language from file extension.
-        
-        Args:
-            file_path: Path to the file.
+    Returns:
+        Dictionary with token estimates and file information
+    """
+    from pathlib import Path
+    
+    total_tokens = 0
+    file_info = []
+    
+    for file_item in files:
+        if isinstance(file_item, (str, Path)):
+            file_path = Path(file_item)
+            if file_path.exists() and file_path.is_file():
+                try:
+                    content = file_path.read_text(encoding='utf-8')
+                    tokens = count_tokens(content)
+                    total_tokens += tokens
+                    
+                    file_info.append({
+                        "path": str(file_path),
+                        "tokens": tokens,
+                        "size": file_path.stat().st_size
+                    })
+                except (UnicodeDecodeError, OSError):
+                    # Skip binary files or files that can't be read
+                    continue
+        else:
+            # Handle file objects with content
+            content = str(file_item)
+            tokens = count_tokens(content)
+            total_tokens += tokens
             
-        Returns:
-            Language identifier string.
-        """
-        file_path = Path(file_path)
-        extension = file_path.suffix.lower()
-        
-        language_map = {
-            '.py': 'python',
-            '.js': 'javascript',
-            '.ts': 'typescript',
-            '.jsx': 'javascript',
-            '.tsx': 'typescript',
-            '.java': 'java',
-            '.c': 'c',
-            '.cpp': 'cpp',
-            '.cxx': 'cpp',
-            '.cc': 'cpp',
-            '.h': 'c',
-            '.hpp': 'cpp',
-            '.cs': 'csharp',
-            '.go': 'go',
-            '.rs': 'rust',
-            '.php': 'php',
-            '.rb': 'ruby',
-            '.html': 'html',
-            '.htm': 'html',
-            '.css': 'css',
-            '.scss': 'css',
-            '.sass': 'css',
-            '.json': 'json',
-            '.yaml': 'yaml',
-            '.yml': 'yaml',
-            '.xml': 'xml',
-            '.md': 'markdown',
-            '.txt': 'text',
-            '.sh': 'text',
-            '.bash': 'text',
-            '.zsh': 'text',
-            '.fish': 'text',
-            '.sql': 'text',
-            '.dockerfile': 'text',
-            '.cfg': 'text',
-            '.ini': 'text',
-            '.toml': 'text',
+            file_info.append({
+                "tokens": tokens,
+                "size": len(content.encode('utf-8'))
+            })
+    
+    return {
+        "total_tokens": total_tokens,
+        "total_formatted": format_token_count(total_tokens),
+        "files": file_info,
+        "model_warnings": {
+            "gpt-4": check_token_limits(total_tokens, "gpt-4"),
+            "gpt-4-turbo": check_token_limits(total_tokens, "gpt-4-turbo"),
+            "claude-3.5-sonnet": check_token_limits(total_tokens, "claude-3.5-sonnet"),
         }
-        
-        return language_map.get(extension, 'text')
-    
-    def get_total_tokens(self, token_counts: Dict[str, int]) -> int:
-        """Get total token count from dictionary.
-        
-        Args:
-            token_counts: Dictionary mapping file paths to token counts.
-            
-        Returns:
-            Total token count.
-        """
-        return sum(token_counts.values())
-    
-    def estimate_cost(self, token_counts: Dict[str, int], 
-                     model: str = 'gpt-4') -> Dict[str, float]:
-        """Estimate API cost based on token count.
-        
-        Args:
-            token_counts: Dictionary mapping file paths to token counts.
-            model: AI model identifier.
-            
-        Returns:
-            Dictionary with cost information.
-        """
-        total_tokens = self.get_total_tokens(token_counts)
-        
-        # Pricing per 1K tokens (as of 2024)
-        pricing = {
-            'gpt-4': 0.03,      # $0.03 per 1K tokens
-            'gpt-3.5-turbo': 0.0015,  # $0.0015 per 1K tokens
-            'claude-3-opus': 0.015,
-            'claude-3-sonnet': 0.003,
-            'gemini-pro': 0.0005,
-        }
-        
-        rate = pricing.get(model, 0.03)
-        estimated_cost = (total_tokens / 1000) * rate
-        
-        return {
-            'total_tokens': total_tokens,
-            'estimated_cost': estimated_cost,
-            'model': model,
-            'rate_per_1k': rate
-        }
-
-
-# Global instance for convenience
-_default_counter = TokenCounter()
-
-def count_tokens(text: str, language: str = 'text') -> int:
-    """Convenience function to count tokens in text."""
-    return _default_counter.count_tokens(text, language)
-
-def count_file_tokens(file_path: Union[str, Path], language: Optional[str] = None) -> int:
-    """Convenience function to count tokens in a file."""
-    return _default_counter.count_file_tokens(file_path, language)
-
-def count_directory_tokens(directory: Union[str, Path], 
-                         include_patterns: List[str] = None,
-                         exclude_patterns: List[str] = None) -> Dict[str, int]:
-    """Convenience function to count tokens in directory."""
-    return _default_counter.count_directory_tokens(directory, include_patterns, exclude_patterns)
+    }
