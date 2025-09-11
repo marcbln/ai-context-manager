@@ -11,8 +11,9 @@ from rich.table import Table
 from ai_context_manager.core.profile import Profile
 from ai_context_manager.core.exporter import ContextExporter
 from ai_context_manager.utils.token_counter import check_token_limits, format_token_count
+from ai_context_manager.config import CLI_CONTEXT_SETTINGS
 
-app = typer.Typer()
+app = typer.Typer(context_settings=CLI_CONTEXT_SETTINGS)
 console = Console()
 
 

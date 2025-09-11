@@ -3,9 +3,9 @@ import typer
 import yaml
 from pathlib import Path
 
-from ..config import get_config_dir
+from ..config import get_config_dir, CLI_CONTEXT_SETTINGS
 
-app = typer.Typer(help="List files in context")
+app = typer.Typer(help="List files in context", context_settings=CLI_CONTEXT_SETTINGS)
 
 @app.command()
 def files(

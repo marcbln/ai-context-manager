@@ -8,9 +8,9 @@ from datetime import datetime
 from rich.console import Console
 
 from ai_context_manager.core.profile import Profile, PathEntry, ProfileManager
-from ai_context_manager.config import get_config_dir
+from ai_context_manager.config import get_config_dir, CLI_CONTEXT_SETTINGS
 
-app = typer.Typer(help="Manage AI Context Manager selection profiles.")
+app = typer.Typer(help="Manage AI Context Manager selection profiles.", context_settings=CLI_CONTEXT_SETTINGS)
 console = Console()
 
 

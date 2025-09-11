@@ -4,9 +4,9 @@ import yaml
 from pathlib import Path
 from typing import List
 
-from ..config import get_config_dir
+from ..config import get_config_dir, CLI_CONTEXT_SETTINGS
 
-app = typer.Typer(help="Remove files from context")
+app = typer.Typer(help="Remove files from context", context_settings=CLI_CONTEXT_SETTINGS)
 
 def load_context():
     """Load the current context from YAML file."""
