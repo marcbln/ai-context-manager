@@ -1,18 +1,11 @@
-"""Main entry point for AI Context Manager CLI."""
-import typer
+# ai_context_manager/__main__.py (Improved Version)
 
-from ai_context_manager.commands.export_cmd import app as export_app
-from ai_context_manager.commands.profile_cmd import app as profile_app
-from ai_context_manager.commands.import_cmd import app as import_app
-from ai_context_manager.config import CLI_CONTEXT_SETTINGS
+"""
+Makes the ai_context_manager package executable.
+Invokes the main CLI application defined in ai_context_manager.cli.
+"""
 
-app = typer.Typer(
-    help="AI Context Manager - Export code context for AI analysis",
-    context_settings=CLI_CONTEXT_SETTINGS,
-)
-app.add_typer(export_app, name="export")
-app.add_typer(profile_app, name="profile")
-app.add_typer(import_app, name="import")
+from ai_context_manager.cli import app
 
 if __name__ == "__main__":
     app()
