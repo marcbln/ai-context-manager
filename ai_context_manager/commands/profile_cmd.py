@@ -3,17 +3,22 @@ import json
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
-import click
+import typer
 from datetime import datetime
+from rich.console import Console
 
 from ai_context_manager.core.profile import Profile, PathEntry, ProfileManager
 from ai_context_manager.config import get_config_dir
+
+app = typer.Typer(help="Manage AI Context Manager selection profiles.")
+console = Console()
 
 
 def get_profile_manager() -> ProfileManager:
     """Get the profile manager instance."""
     config_dir = get_config_dir()
     profiles_dir = config_dir / "profiles"
+    profiles_dir.mkdir(exist_ok=True, parents=True)
     return ProfileManager(profiles_dir)
 
 
@@ -21,13 +26,14 @@ def load_session_context() -> Dict[str, Any]:
     """Load the current session context from YAML file."""
     config_dir = get_config_dir()
     context_file = config_dir / "context.yaml"
-    
+
     if not context_file.exists():
         return {"files": []}
-    
+
     try:
         import yaml
-        with context_file.open('r') as f:
+
+        with context_file.open("r") as f:
             return yaml.safe_load(f) or {"files": []}
     except Exception:
         return {"files": []}
@@ -37,42 +43,39 @@ def save_session_context(context: Dict[str, Any]) -> None:
     """Save the session context to YAML file."""
     config_dir = get_config_dir()
     context_file = config_dir / "context.yaml"
-    
+
     try:
         import yaml
-        with context_file.open('w') as f:
+
+        with context_file.open("w") as f:
             yaml.dump(context, f, default_flow_style=False)
     except Exception as e:
-        raise click.ClickException(f"Failed to save session context: {e}")
+        console.print(f"[red]Failed to save session context: {e}[/red]")
+        raise typer.Exit(1)
 
 
-@click.group()
-def profile():
-    """Manage AI Context Manager selection profiles."""
-    pass
-
-
-@profile.command()
-@click.argument('name')
-@click.option('--description', prompt='Description', help='Description of the profile')
-@click.option('--base-path', type=click.Path(path_type=Path), help='Base path for the profile')
-def create(name: str, description: str, base_path: Optional[Path]):
-    """Create a new selection profile from current session."""
+@app.command()
+def create(
+    name: str = typer.Argument(..., help="Name for the new profile."),
+    description: str = typer.Option(..., prompt=True, help="Description of the profile."),
+    base_path: Optional[Path] = typer.Option(
+        None, help="Base path for the profile's relative paths."
+    ),
+):
+    """Create a new selection profile from the current session."""
     profile_manager = get_profile_manager()
-    
+
     if profile_manager.profile_exists(name):
-        click.echo(f"Profile '{name}' already exists.")
-        return
-    
-    # Load current session context
+        console.print(f"[yellow]Profile '{name}' already exists.[/yellow]")
+        raise typer.Exit(1)
+
     session_context = load_session_context()
     files = session_context.get("files", [])
-    
+
     if not files:
-        click.echo("No files in current session to create profile from.")
-        return
-    
-    # Create new profile
+        console.print("[yellow]No files in current session to create a profile from.[/yellow]")
+        raise typer.Exit(1)
+
     new_profile = Profile(
         name=name,
         description=description,
@@ -80,210 +83,178 @@ def create(name: str, description: str, base_path: Optional[Path]):
         modified=datetime.now(),
         base_path=base_path or Path.cwd(),
         paths=[],
-        exclude_patterns=[]
+        exclude_patterns=[],
     )
-    
-    # Add files as PathEntry objects
+
     for file_path in files:
         path = Path(file_path)
-        new_profile.add_path(path, is_directory=False, recursive=False)
-    
+        new_profile.paths.append(PathEntry(path=path, is_directory=False, recursive=False))
+
     profile_manager.save_profile(new_profile)
-    click.echo(f"Profile '{name}' created successfully with {len(files)} files!")
+    console.print(f"[green]Profile '{name}' created successfully with {len(files)} files![/green]")
 
 
-@profile.command()
-def list():
-    """List all selection profiles."""
+@app.command(name="list")
+def list_profiles():
+    """List all available selection profiles."""
     profile_manager = get_profile_manager()
     profiles = profile_manager.list_profiles()
-    
+
     if not profiles:
-        click.echo("No profiles found.")
+        console.print("[yellow]No profiles found.[/yellow]")
         return
-    
-    click.echo("Available profiles:")
+
+    console.print("[bold]Available profiles:[/bold]")
     for profile_name in profiles:
         profile = profile_manager.get_profile(profile_name)
         if profile:
-            click.echo(f"  {profile.name}: {profile.description}")
+            console.print(f"  [cyan]{profile.name}[/cyan]: {profile.description}")
 
 
-@profile.command()
-@click.argument('name')
-def show(name: str):
+@app.command()
+def show(name: str = typer.Argument(..., help="The name of the profile to show.")):
     """Show details of a specific profile."""
     profile_manager = get_profile_manager()
     profile = profile_manager.get_profile(name)
-    
+
     if not profile:
-        click.echo(f"Profile '{name}' not found.")
-        return
-    
-    click.echo(f"Profile: {profile.name}")
-    click.echo(f"Description: {profile.description}")
-    click.echo(f"Created: {profile.created}")
-    click.echo(f"Modified: {profile.modified}")
-    click.echo(f"Base path: {profile.base_path}")
-    click.echo(f"Files ({len(profile.paths)}):")
-    
+        console.print(f"[red]Profile '{name}' not found.[/red]")
+        raise typer.Exit(1)
+
+    console.print(f"[bold]Profile:[/bold] [cyan]{profile.name}[/cyan]")
+    console.print(f"  Description: {profile.description}")
+    console.print(f"  Created:     {profile.created.isoformat()}")
+    console.print(f"  Modified:    {profile.modified.isoformat()}")
+    console.print(f"  Base path:   {profile.base_path}")
+    console.print(f"  Paths ({len(profile.paths)}):")
     for entry in profile.paths:
-        click.echo(f"  - {entry.path}")
+        console.print(f"    - {entry.path} (dir: {entry.is_directory}, recursive: {entry.recursive})")
 
 
-@profile.command()
-@click.argument('name')
-def load(name: str):
-    """Load a selection profile into current session."""
+@app.command()
+def load(name: str = typer.Argument(..., help="The name of the profile to load.")):
+    """Load a selection profile into the current session."""
     profile_manager = get_profile_manager()
     profile = profile_manager.get_profile(name)
-    
+
     if not profile:
-        click.echo(f"Profile '{name}' not found.")
-        return
-    
-    # Get all files from profile paths
+        console.print(f"[red]Profile '{name}' not found.[/red]")
+        raise typer.Exit(1)
+
     files = []
+    base_path = profile.base_path or Path.cwd()
     for entry in profile.paths:
+        entry_path = entry.path if entry.path.is_absolute() else base_path / entry.path
         if entry.is_directory:
             if entry.recursive:
-                files.extend(str(p) for p in entry.path.rglob('*') if p.is_file())
+                files.extend(str(p.resolve()) for p in entry_path.rglob("*") if p.is_file())
             else:
-                files.extend(str(p) for p in entry.path.iterdir() if p.is_file())
-        else:
-            if entry.path.exists():
-                files.append(str(entry.path))
-    
-    # Save to session context
-    session_context = {"files": files}
+                files.extend(str(p.resolve()) for p in entry_path.iterdir() if p.is_file())
+        elif entry_path.exists():
+            files.append(str(entry_path.resolve()))
+
+    session_context = {"files": sorted(list(set(files)))}
     save_session_context(session_context)
-    
-    click.echo(f"Profile '{name}' loaded successfully with {len(files)} files!")
+    console.print(f"[green]Profile '{name}' loaded successfully with {len(session_context['files'])} files![/green]")
 
 
-@profile.command()
-@click.argument('name')
-def delete(name: str):
+@app.command()
+def delete(name: str = typer.Argument(..., help="The name of the profile to delete.")):
     """Delete a selection profile."""
     profile_manager = get_profile_manager()
-    
+
     if not profile_manager.profile_exists(name):
-        click.echo(f"Profile '{name}' not found.")
-        return
-    
-    if click.confirm(f"Are you sure you want to delete profile '{name}'?"):
+        console.print(f"[red]Profile '{name}' not found.[/red]")
+        raise typer.Exit(1)
+
+    if typer.confirm(f"Are you sure you want to delete profile '{name}'?"):
         if profile_manager.delete_profile(name):
-            click.echo(f"Profile '{name}' deleted successfully!")
+            console.print(f"[green]Profile '{name}' deleted successfully![/green]")
         else:
-            click.echo(f"Failed to delete profile '{name}'.")
+            console.print(f"[red]Failed to delete profile '{name}'.[/red]")
+            raise typer.Exit(1)
 
 
-@profile.command()
-@click.argument('name')
-@click.option('--description', help='New description')
-@click.option('--base-path', type=click.Path(path_type=Path), help='New base path')
-def update(name: str, description: Optional[str], base_path: Optional[Path]):
-    """Update an existing profile with current session."""
+@app.command()
+def update(
+    name: str = typer.Argument(..., help="The profile to update."),
+    description: Optional[str] = typer.Option(None, help="New description."),
+    base_path: Optional[Path] = typer.Option(None, help="New base path."),
+):
+    """Update an existing profile with the current session."""
     profile_manager = get_profile_manager()
     profile = profile_manager.get_profile(name)
-    
+
     if not profile:
-        click.echo(f"Profile '{name}' not found.")
-        return
-    
-    # Load current session context
+        console.print(f"[red]Profile '{name}' not found.[/red]")
+        raise typer.Exit(1)
+
     session_context = load_session_context()
     files = session_context.get("files", [])
-    
+
     if not files:
-        click.echo("No files in current session to update profile with.")
-        return
-    
-    # Update profile with current session files
-    profile.paths = []
-    for file_path in files:
-        path = Path(file_path)
-        profile.add_path(path, is_directory=False, recursive=False)
-    
+        console.print("[yellow]No files in current session to update profile with.[/yellow]")
+        raise typer.Exit(1)
+
+    profile.paths = [PathEntry(path=Path(fp), is_directory=False, recursive=False) for fp in files]
     profile.modified = datetime.now()
-    
-    if description:
+
+    if description is not None:
         profile.description = description
-    if base_path:
+    if base_path is not None:
         profile.base_path = base_path
-    
+
     profile_manager.save_profile(profile)
-    click.echo(f"Profile '{name}' updated successfully with {len(files)} files!")
+    console.print(f"[green]Profile '{name}' updated successfully with {len(files)} files![/green]")
 
 
-@profile.command()
-@click.option('--output', type=click.Path(path_type=Path), help='Output file path')
-@click.argument('name')
-def export(name: str, output: Optional[Path]):
-    """Export a selection profile to JSON file."""
+@app.command()
+def export(
+    name: str = typer.Argument(..., help="The name of the profile to export."),
+    output: Optional[Path] = typer.Option(None, "-o", "--output", help="Output file path."),
+):
+    """Export a selection profile to a YAML file."""
     profile_manager = get_profile_manager()
     profile = profile_manager.get_profile(name)
-    
+
     if not profile:
-        click.echo(f"Profile '{name}' not found.")
-        return
-    
+        console.print(f"[red]Profile '{name}' not found.[/red]")
+        raise typer.Exit(1)
+
     if output is None:
-        output = Path(f"{profile.name}_profile.json")
-    
+        output = Path.cwd() / f"{profile.name}_profile.yaml"
+
     try:
-        with output.open('w') as f:
-            json.dump(profile.to_dict(), f, indent=2, default=str)
-        click.echo(f"Profile exported to {output}")
+        profile.save(output)
+        console.print(f"[green]Profile exported to {output}[/green]")
     except Exception as e:
-        click.echo(f"Failed to export profile: {e}", err=True)
+        console.print(f"[red]Failed to export profile: {e}[/red]")
+        raise typer.Exit(1)
 
 
-@profile.command()
-@click.argument('file_path', type=click.Path(exists=True, path_type=Path))
-def import_profile(file_path: Path):
-    """Import a selection profile from JSON file."""
+@app.command(name="import")
+def import_profile(
+    file_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        help="Path to profile YAML file.",
+    )
+):
+    """Import a selection profile from a YAML file."""
     try:
-        with file_path.open('r') as f:
-            data = json.load(f)
-        
-        # Convert JSON data to Profile
-        profile = Profile.from_dict(data)
-        
+        profile = Profile.load(file_path)
         profile_manager = get_profile_manager()
+
+        if profile_manager.profile_exists(profile.name):
+            if not typer.confirm(f"Profile '{profile.name}' already exists. Overwrite?"):
+                console.print("[yellow]Import cancelled.[/yellow]")
+                raise typer.Exit()
+
         profile_manager.save_profile(profile)
-        
-        click.echo(f"Profile '{profile.name}' imported successfully!")
+        console.print(f"[green]Profile '{profile.name}' imported successfully![/green]")
     except Exception as e:
-        click.echo(f"Failed to import profile: {e}", err=True)
-
-
-@profile.command()
-@click.option('--backup-dir', type=click.Path(path_type=Path), help='Directory to backup old profiles')
-def migrate(backup_dir: Optional[Path]):
-    """Migrate old JSON export profiles to new YAML selection profiles."""
-    config_dir = get_config_dir()
-    old_profile_path = config_dir / "profile.json"
-    
-    if not old_profile_path.exists():
-        click.echo("No old profile.json found to migrate.")
-        return
-    
-    if backup_dir is None:
-        backup_dir = config_dir / "backups"
-    
-    try:
-        # Load old profile
-        with old_profile_path.open('r') as f:
-            old_data = json.load(f)
-        
-        # Create backup
-        backup_dir.mkdir(parents=True, exist_ok=True)
-        backup_path = backup_dir / f"profile_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        old_profile_path.rename(backup_path)
-        
-        click.echo(f"Old profile backed up to {backup_path}")
-        click.echo("Migration completed. Old profiles are now in YAML format in profiles/ directory.")
-        
-    except Exception as e:
-        click.echo(f"Migration failed: {e}", err=True)
+        console.print(f"[red]Failed to import profile: {e}[/red]")
+        raise typer.Exit(1)
