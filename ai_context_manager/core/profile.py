@@ -18,17 +18,19 @@ class PathEntry:
 class Profile:
     """Represents an export profile."""
     name: str
+    description: str  # <-- ADDED THIS FIELD
     created: datetime
     modified: datetime
     base_path: Optional[Path]
     paths: List[PathEntry]
     exclude_patterns: List[str]
     include_metadata: bool = True
-    
+
     def to_dict(self) -> dict:
         """Convert profile to dictionary representation."""
         return {
             "name": self.name,
+            "description": self.description,  # <-- ADDED THIS LINE
             "created": self.created.isoformat(),
             "modified": self.modified.isoformat(),
             "base_path": str(self.base_path) if self.base_path else None,
@@ -43,12 +45,13 @@ class Profile:
             "exclude_patterns": self.exclude_patterns,
             "include_metadata": self.include_metadata
         }
-    
+
     @classmethod
     def from_dict(cls, data: dict) -> 'Profile':
         """Create profile from dictionary representation."""
         return cls(
             name=data["name"],
+            description=data.get("description", ""),  # <-- ADDED THIS LINE, with default for backward compatibility
             created=datetime.fromisoformat(data["created"]),
             modified=datetime.fromisoformat(data["modified"]),
             base_path=Path(data["base_path"]) if data.get("base_path") else None,

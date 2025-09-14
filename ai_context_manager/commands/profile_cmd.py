@@ -57,41 +57,51 @@ def save_session_context(context: Dict[str, Any]) -> None:
 @app.command()
 def create(
     name: str = typer.Argument(..., help="Name for the new profile."),
-    description: str = typer.Option(..., prompt=True, help="Description of the profile."),
+    paths: List[Path] = typer.Argument(..., help="File or directory paths to include in the profile."),
+    description: Optional[str] = typer.Option(None, "--description", "-d", help="Description of the profile."),
     base_path: Optional[Path] = typer.Option(
-        None, help="Base path for the profile's relative paths."
+        None, "--base-path", "-b", help="Base path for the profile's relative paths. Defaults to the current directory."
+    ),
+    exclude: Optional[List[str]] = typer.Option(
+        None, "--exclude", "-e", help="Pattern to exclude files. Can be used multiple times."
     ),
 ):
-    """Create a new selection profile from the current session."""
+    """Create a new selection profile directly from paths and patterns."""
     profile_manager = get_profile_manager()
 
     if profile_manager.profile_exists(name):
-        console.print(f"[yellow]Profile '{name}' already exists.[/yellow]")
+        console.print(f"[yellow]Profile '{name}' already exists. Use 'aicontext profile update' to modify.[/yellow]")
         raise typer.Exit(1)
 
-    session_context = load_session_context()
-    files = session_context.get("files", [])
+    path_entries = []
+    for p in paths:
+        if not p.exists():
+            console.print(f"[yellow]Warning: Path does not exist and will be skipped: {p}[/yellow]")
+            continue
+        is_dir = p.is_dir()
+        # Assume recursion is desired for directories, which is a sensible default.
+        path_entries.append(PathEntry(path=p, is_directory=is_dir, recursive=is_dir))
 
-    if not files:
-        console.print("[yellow]No files in current session to create a profile from.[/yellow]")
+    if not path_entries:
+        console.print("[red]Error: No valid paths were provided to create the profile.[/red]")
         raise typer.Exit(1)
+
+    final_description = description
+    if not final_description:
+        final_description = f"Profile for '{name}' created on {datetime.now().strftime('%Y-%m-%d')}."
 
     new_profile = Profile(
         name=name,
-        description=description,
+        description=final_description,
         created=datetime.now(),
         modified=datetime.now(),
         base_path=base_path or Path.cwd(),
-        paths=[],
-        exclude_patterns=[],
+        paths=path_entries,
+        exclude_patterns=exclude or [],
     )
 
-    for file_path in files:
-        path = Path(file_path)
-        new_profile.paths.append(PathEntry(path=path, is_directory=False, recursive=False))
-
     profile_manager.save_profile(new_profile)
-    console.print(f"[green]Profile '{name}' created successfully with {len(files)} files![/green]")
+    console.print(f"[green]Profile '{name}' created successfully with {len(path_entries)} path entries![/green]")
 
 
 @app.command(name="list")
