@@ -14,7 +14,9 @@ A command-line tool for selecting files from your codebase and exporting them in
 ## Installation
 
 ```bash
-pip install .
+uv venv
+source .venv/bin/activate
+uv pip install -e .
 ```
 
 ## Workflows
