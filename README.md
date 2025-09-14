@@ -1,195 +1,112 @@
 # AI Context Manager
 
-Export codebases for AI analysis with intelligent file selection and format support.
+A command-line tool for selecting files from your codebase and exporting them into a single, AI-friendly context file.
 
 ## Features
 
-- **Intelligent File Selection**: Automatically select relevant files based on patterns and size limits
-- **Multiple Export Formats**: Support for Markdown, JSON, XML, and YAML
-- **Profile Management**: Create and manage different export profiles for various project types
-- **Token Counting**: Check token limits for different AI models
-- **Flexible Filtering**: Include/exclude files with glob patterns
-- **Binary File Handling**: Option to include or exclude binary files
-- **Dry Run Mode**: Preview what would be exported without creating files
+- **Profile Management**: Define reusable sets of files and exclusion patterns for different projects.
+- **Session Context**: Interactively add, remove, and list files for a one-off export.
+- **Multiple Export Formats**: Supports Markdown, JSON, XML, and YAML.
+- **Token Counting**: Estimate token counts and check against AI model limits.
+- **Flexible Filtering**: Use glob patterns to include and exclude files.
+- **Dry Run Mode**: Preview what will be exported without creating a file.
 
 ## Installation
 
 ```bash
-pip install ai-context-manager
+pip install .
 ```
 
-For YAML support:
+## Workflows
+
+AI Context Manager supports two primary workflows:
+
+1.  **Profile-based Workflow (Recommended)**: Create a named profile with your desired file paths and exclusion rules. Use this profile to generate context files consistently.
+2.  **Session-based Workflow**: Interactively add and remove files for a quick, one-time export without creating a permanent profile.
+
+---
+
+### Profile-based Workflow (Quick Start)
+
+#### 1. Create a Profile
+A profile defines a reusable set of paths and rules.
+
 ```bash
-pip install ai-context-manager[yaml]
+# Create a profile named 'python-project' that includes the 'src' and 'tests' directories
+# and excludes any files in '__pycache__' directories.
+aicontext profile create python-project src/ tests/ --exclude "__pycache__/*"
 ```
 
-## Quick Start
-
-### 1. Create a Profile
-
-```bash
-# Create a basic profile
-ai-context profile create my-project
-
-# Create with specific patterns
-ai-context profile create python-project --include "*.py" --exclude "__pycache__/*"
-```
-
-### 2. Export Files
+#### 2. Export Using the Profile
+Use the profile's name to generate the context file.
 
 ```bash
 # Export to markdown
-ai-context export output.md --profile my-project
+aicontext export output.md --profile python-project
 
-# Export to JSON with size limit
-ai-context export output.json --profile my-project --format json --max-size 50000
-
-# Dry run to see what would be exported
-ai-context export output.md --profile my-project --dry-run --verbose
+# Export to JSON with a file size limit and check against GPT-4o's token limit
+aicontext export context.json --profile python-project --format json --max-size 50000 --model gpt-4o
 ```
 
-## Usage
+---
+
+### Session-based Workflow
+
+Use this for quick, one-off tasks where a permanent profile isn't needed.
+
+#### 1. Add Files to the Session
+Build your context by adding files and directories.
+
+```bash
+# Add specific files
+aicontext add files src/main.py src/utils.py
+
+# Add a directory recursively
+aicontext add files docs/ --recursive
+```
+
+#### 2. List and Remove Files (Optional)
+Check your current session and remove any unwanted files.
+
+```bash
+# List files currently in the session
+aicontext list files
+
+# Remove a file
+aicontext remove files src/utils.py
+```
+
+#### 3. Export the Session
+Run the `export` command without the `--profile` flag.
+
+```bash
+# Export the current session directly to a file
+aicontext export session_output.md
+```
+
+---
+
+## Full Command Reference
+
+### Session Management
+The "session" is a temporary list of files stored in `context.yaml`.
+
+- `aicontext add files <path>... [-r]`: Add files/directories to the current session. Use `-r` for recursive.
+- `aicontext remove files <path>... [--all]`: Remove files from the session. Use `--all` to clear.
+- `aicontext list files [-v]`: List files in the session. Use `-v` for verbose output.
+- `aicontext import directory <path>`: Import a directory structure into the session, preserving relative paths.
 
 ### Profile Management
+Profiles are reusable configurations stored in `~/.config/ai-context-manager/profiles/`.
 
-```bash
-# List all profiles
-ai-context profile list
+- `aicontext profile create <name> <path>...`: Create a new profile from paths and patterns.
+- `aicontext profile list`: List all saved profiles.
+- `aicontext profile show <name>`: Show details of a specific profile.
+- `aicontext profile update <name>`: Save the current session to a profile (creates if not exists).
+- `aicontext profile delete <name>`: Delete a profile.
 
-# Show profile details
-ai-context profile show my-project
-
-# Edit profile interactively
-ai-context profile edit my-project
-
-# Delete profile
-ai-context profile delete my-project
-```
-
-### Export Options
-
-```bash
-ai-context export [OPTIONS] OUTPUT
-
-Options:
-  --profile, -p TEXT      Profile name to use [required]
-  --format, -f TEXT       Export format: markdown, json, xml, yaml [default: markdown]
-  --max-size, -s INTEGER  Maximum file size in bytes [default: 102400]
-  --include-binary, -b    Include binary files
-  --model, -m TEXT        AI model for token limit checking [default: gpt-4]
-  --dry-run               Show what would be exported without creating file
-  --verbose, -v           Show detailed information
-```
-
-### Available Formats
-
-- **markdown**: GitHub-flavored markdown with code blocks
-- **json**: Structured JSON format with metadata
-- **xml**: XML format with hierarchical structure
-- **yaml**: YAML format with human-readable structure
-
-### AI Model Limits
-
-Check token limits for different AI models:
-
-```bash
-ai-context export models
-```
-
-## Configuration
-
-Profiles are stored in `~/.ai-context-manager/profiles/` as JSON files. Each profile contains:
-
-- **include_patterns**: List of glob patterns to include
-- **exclude_patterns**: List of glob patterns to exclude
-- **max_file_size**: Maximum file size in bytes
-- **include_binary**: Whether to include binary files
-
-## Examples
-
-### Python Project
-
-```bash
-# Create profile for Python project
-ai-context profile create python-app \
-  --include "*.py" \
-  --include "*.md" \
-  --include "*.txt" \
-  --include "*.json" \
-  --include "*.yaml" \
-  --include "*.yml" \
-  --exclude "__pycache__/*" \
-  --exclude "*.pyc" \
-  --exclude ".git/*" \
-  --exclude ".pytest_cache/*" \
-  --exclude "venv/*" \
-  --exclude ".venv/*"
-
-# Export to markdown
-ai-context export python-context.md --profile python-app
-```
-
-### Web Development Project
-
-```bash
-# Create profile for web project
-ai-context profile create web-app \
-  --include "*.js" \
-  --include "*.ts" \
-  --include "*.jsx" \
-  --include "*.tsx" \
-  --include "*.html" \
-  --include "*.css" \
-  --include "*.scss" \
-  --include "*.json" \
-  --include "*.md" \
-  --exclude "node_modules/*" \
-  --exclude "dist/*" \
-  --exclude "build/*" \
-  --exclude ".git/*"
-
-# Export with token limit check for GPT-4
-ai-context export web-context.md --profile web-app --model gpt-4
-```
-
-### Documentation Export
-
-```bash
-# Create profile for documentation
-ai-context profile create docs \
-  --include "*.md" \
-  --include "*.rst" \
-  --include "*.txt" \
-  --exclude "node_modules/*" \
-  --exclude ".git/*"
-
-# Export to JSON for processing
-ai-context export docs.json --profile docs --format json
-```
-
-## Development
-
-### Setup Development Environment
-
-```bash
-git clone https://github.com/ai-context-manager/ai-context-manager.git
-cd ai-context-manager
-pip install -e ".[dev]"
-```
-
-### Running Tests
-
-```bash
-pytest
-```
-
-### Code Formatting
-
-```bash
-black ai_context_manager/
-isort ai_context_manager/
-```
-
-## License
-
-MIT License - see LICENSE file for details.
+### Exporting
+- `aicontext export <output> [--profile <name>]`: Export files to a formatted context file. If `--profile` is omitted, the current session is used.
+  - `--format <fmt>`: Set format (markdown, json, xml, yaml).
+  - `--model <name>`: Check token count against a specific model.
+  - `--dry-run`: Preview the output without writing a file.
