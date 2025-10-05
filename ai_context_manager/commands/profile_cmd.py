@@ -65,24 +65,34 @@ def create(
     exclude: Optional[List[str]] = typer.Option(
         None, "--exclude", "-e", help="Pattern to exclude files. Can be used multiple times."
     ),
+    json_output: bool = typer.Option(False, "--json", help="Output results as JSON to stdout"),
 ):
     """Create a new selection profile directly from paths and patterns."""
     profile_manager = get_profile_manager()
 
     if profile_manager.profile_exists(name):
+        if json_output:
+            typer.echo(json.dumps({"success": False, "error": f"Profile '{name}' already exists."}))
+            raise typer.Exit(1)
         console.print(f"[yellow]Profile '{name}' already exists. Use 'aicontext profile update' to modify.[/yellow]")
         raise typer.Exit(1)
 
     path_entries = []
     for p in paths:
         if not p.exists():
-            console.print(f"[yellow]Warning: Path does not exist and will be skipped: {p}[/yellow]")
+            if json_output:
+                console.print(f"[yellow]Warning: Path does not exist and will be skipped: {p}[/yellow]", stderr=True)
+            else:
+                console.print(f"[yellow]Warning: Path does not exist and will be skipped: {p}[/yellow]")
             continue
         is_dir = p.is_dir()
         # Assume recursion is desired for directories, which is a sensible default.
         path_entries.append(PathEntry(path=p, is_directory=is_dir, recursive=is_dir))
 
     if not path_entries:
+        if json_output:
+            typer.echo(json.dumps({"success": False, "error": "No valid paths were provided to create the profile."}))
+            raise typer.Exit(1)
         console.print("[red]Error: No valid paths were provided to create the profile.[/red]")
         raise typer.Exit(1)
 
@@ -101,19 +111,35 @@ def create(
     )
 
     profile_manager.save_profile(new_profile)
+    if json_output:
+        typer.echo(json.dumps(new_profile.to_dict()))
+        raise typer.Exit()
     console.print(f"[green]Profile '{name}' created successfully with {len(path_entries)} path entries![/green]")
 
 
 @app.command(name="list")
-def list_profiles():
+def list_profiles(json_output: bool = typer.Option(False, "--json", help="Output results as JSON to stdout")):
     """List all available selection profiles."""
     profile_manager = get_profile_manager()
     profiles = profile_manager.list_profiles()
 
     if not profiles:
+        if json_output:
+            typer.echo(json.dumps({"profile_count": 0, "profiles": []}))
+            raise typer.Exit()
         console.print("[yellow]No profiles found.[/yellow]")
         return
 
+    if json_output:
+        profile_objects = []
+        for profile_name in profiles:
+            profile = profile_manager.get_profile(profile_name)
+            if profile:
+                profile_objects.append(profile.to_dict())
+        result = {"profile_count": len(profile_objects), "profiles": profile_objects}
+        typer.echo(json.dumps(result))
+        raise typer.Exit()
+    
     console.print("[bold]Available profiles:[/bold]")
     for profile_name in profiles:
         profile = profile_manager.get_profile(profile_name)
@@ -122,15 +148,25 @@ def list_profiles():
 
 
 @app.command()
-def show(name: str = typer.Argument(..., help="The name of the profile to show.")):
+def show(
+    name: str = typer.Argument(..., help="The name of the profile to show."),
+    json_output: bool = typer.Option(False, "--json", help="Output results as JSON to stdout"),
+):
     """Show details of a specific profile."""
     profile_manager = get_profile_manager()
     profile = profile_manager.get_profile(name)
 
     if not profile:
+        if json_output:
+            typer.echo(json.dumps({"success": False, "error": f"Profile '{name}' not found."}))
+            raise typer.Exit(1)
         console.print(f"[red]Profile '{name}' not found.[/red]")
         raise typer.Exit(1)
 
+    if json_output:
+        typer.echo(json.dumps(profile.to_dict()))
+        raise typer.Exit()
+    
     console.print(f"[bold]Profile:[/bold] [cyan]{profile.name}[/cyan]")
     console.print(f"  Description: {profile.description}")
     console.print(f"  Created:     {profile.created.isoformat()}")
@@ -142,12 +178,18 @@ def show(name: str = typer.Argument(..., help="The name of the profile to show."
 
 
 @app.command()
-def load(name: str = typer.Argument(..., help="The name of the profile to load.")):
+def load(
+    name: str = typer.Argument(..., help="The name of the profile to load."),
+    json_output: bool = typer.Option(False, "--json", help="Output results as JSON to stdout"),
+):
     """Load a selection profile into the current session."""
     profile_manager = get_profile_manager()
     profile = profile_manager.get_profile(name)
 
     if not profile:
+        if json_output:
+            typer.echo(json.dumps({"success": False, "error": f"Profile '{name}' not found."}))
+            raise typer.Exit(1)
         console.print(f"[red]Profile '{name}' not found.[/red]")
         raise typer.Exit(1)
 
@@ -165,18 +207,40 @@ def load(name: str = typer.Argument(..., help="The name of the profile to load."
 
     session_context = {"files": sorted(list(set(files)))}
     save_session_context(session_context)
+    if json_output:
+        typer.echo(json.dumps({
+            "success": True,
+            "loaded_profile": name,
+            "context": {"file_count": len(session_context["files"]), "files": session_context["files"]},
+        }))
+        raise typer.Exit()
     console.print(f"[green]Profile '{name}' loaded successfully with {len(session_context['files'])} files![/green]")
 
 
 @app.command()
-def delete(name: str = typer.Argument(..., help="The name of the profile to delete.")):
+def delete(
+    name: str = typer.Argument(..., help="The name of the profile to delete."),
+    json_output: bool = typer.Option(False, "--json", help="Output results as JSON to stdout"),
+):
     """Delete a selection profile."""
     profile_manager = get_profile_manager()
 
     if not profile_manager.profile_exists(name):
+        if json_output:
+            typer.echo(json.dumps({"success": False, "error": f"Profile '{name}' not found."}))
+            raise typer.Exit(1)
         console.print(f"[red]Profile '{name}' not found.[/red]")
         raise typer.Exit(1)
 
+    if json_output:
+        # Non-interactive deletion in JSON mode
+        if profile_manager.delete_profile(name):
+            typer.echo(json.dumps({"success": True, "message": f"Profile '{name}' deleted successfully!"}))
+            raise typer.Exit()
+        else:
+            typer.echo(json.dumps({"success": False, "error": f"Failed to delete profile '{name}'."}))
+            raise typer.Exit(1)
+    
     if typer.confirm(f"Are you sure you want to delete profile '{name}'?"):
         if profile_manager.delete_profile(name):
             console.print(f"[green]Profile '{name}' deleted successfully![/green]")
@@ -190,6 +254,7 @@ def update(
     name: str = typer.Argument(..., help="The profile to update."),
     description: Optional[str] = typer.Option(None, help="New description."),
     base_path: Optional[Path] = typer.Option(None, help="New base path."),
+    json_output: bool = typer.Option(False, "--json", help="Output results as JSON to stdout"),
 ):
     """Update an existing profile with the current session."""
     profile_manager = get_profile_manager()
@@ -203,6 +268,9 @@ def update(
     files = session_context.get("files", [])
 
     if not files:
+        if json_output:
+            typer.echo(json.dumps({"success": False, "error": "No files in current session to update profile with."}))
+            raise typer.Exit(1)
         console.print("[yellow]No files in current session to update profile with.[/yellow]")
         raise typer.Exit(1)
 
@@ -215,6 +283,9 @@ def update(
         profile.base_path = base_path
 
     profile_manager.save_profile(profile)
+    if json_output:
+        typer.echo(json.dumps(profile.to_dict()))
+        raise typer.Exit()
     console.print(f"[green]Profile '{name}' updated successfully with {len(files)} files![/green]")
 
 

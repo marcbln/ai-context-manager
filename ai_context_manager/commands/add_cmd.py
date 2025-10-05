@@ -1,4 +1,5 @@
 """Add files to context command."""
+import json
 import typer
 import fnmatch
 from pathlib import Path
@@ -35,6 +36,7 @@ def files(
     recursive: bool = typer.Option(False, "--recursive", "-r", help="Add directories recursively"),
     pattern: Optional[str] = typer.Option(None, "--pattern", "-p", help="File pattern to match"),
     exclude: Optional[str] = typer.Option(None, "--exclude", "-e", help="Pattern to exclude files"),
+    json_output: bool = typer.Option(False, "--json", help="Output results as JSON to stdout"),
 ):
     """Add files to the current context."""
     context = load_context()
@@ -73,6 +75,19 @@ def files(
     
     context["files"] = all_files
     save_context(context)
+    
+    if json_output:
+        result = {
+            "success": True,
+            "message": f"Added {len(new_files)} new file(s) to context",
+            "added_files": new_files,
+            "context": {
+                "file_count": len(all_files),
+                "files": all_files,
+            },
+        }
+        typer.echo(json.dumps(result))
+        raise typer.Exit()
     
     typer.echo(f"Added {len(new_files)} new file(s) to context")
     for file in new_files:

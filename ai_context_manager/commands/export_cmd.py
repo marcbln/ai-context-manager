@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Optional, List, Any, Dict
 from datetime import datetime
+import json
 
 import typer
 import yaml
@@ -39,6 +40,7 @@ def export_context(
     model: str = typer.Option("gpt-4", "--model", "-m", help="AI model for token limit checking"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be exported without creating file"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed information"),
+    json_summary: bool = typer.Option(False, "--json-summary", help="Print export summary as JSON to stdout"),
 ):
     """Export selected files to an AI context format from a profile or the current session."""
     
@@ -48,9 +50,15 @@ def export_context(
         try:
             profile_obj = Profile.load(profile_name)
         except FileNotFoundError:
+            if json_summary:
+                typer.echo(json.dumps({"success": False, "error": f"Profile '{profile_name}' not found."}))
+                raise typer.Exit(1)
             console.print(f"[red]Error: Profile '{profile_name}' not found.[/red]")
             raise typer.Exit(1)
         except Exception as e:
+            if json_summary:
+                typer.echo(json.dumps({"success": False, "error": f"Error loading profile: {e}"}))
+                raise typer.Exit(1)
             console.print(f"[red]Error loading profile: {e}[/red]")
             raise typer.Exit(1)
     else:
@@ -58,6 +66,9 @@ def export_context(
         session_context = load_session_context()
         session_files = session_context.get("files", [])
         if not session_files:
+            if json_summary:
+                typer.echo(json.dumps({"success": False, "error": "No files in the current session to export. Use 'aicontext add' to add files."}))
+                raise typer.Exit(1)
             console.print("[yellow]No files in the current session to export. Use 'aicontext add' to add files.[/yellow]")
             raise typer.Exit()
         
@@ -74,6 +85,9 @@ def export_context(
     # Validate format
     valid_formats = ["markdown", "json", "xml", "yaml"]
     if format.lower() not in valid_formats:
+        if json_summary:
+            typer.echo(json.dumps({"success": False, "error": f"Invalid format '{format}'. Valid formats: {', '.join(valid_formats)}"}))
+            raise typer.Exit(1)
         console.print(f"[red]Error: Invalid format '{format}'. Valid formats: {', '.join(valid_formats)}[/red]")
         raise typer.Exit(1)
     
@@ -105,19 +119,33 @@ def export_context(
             console.print(f"[red]✗ Exceeds {model} limits ({limit_check['percentage']:.1f}%)[/red]")
         return
     
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        progress.add_task("Exporting files...", total=None)
-        
+    if json_summary:
+        # Run export without progress output to avoid polluting stdout
         result = exporter.export_to_file(
             output_path=output,
             format=format,
             max_file_size=max_size,
             include_binary=include_binary,
         )
+    else:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            progress.add_task("Exporting files...", total=None)
+            
+            result = exporter.export_to_file(
+                output_path=output,
+                format=format,
+                max_file_size=max_size,
+                include_binary=include_binary,
+            )
+    
+    if json_summary:
+        # Print machine-readable JSON summary only
+        typer.echo(json.dumps(result))
+        raise typer.Exit(0 if result.get("success") else 1)
     
     if result["success"]:
         console.print(f"\n[green]✓ {result['message']}[/green]")

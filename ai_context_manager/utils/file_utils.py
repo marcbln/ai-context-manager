@@ -86,12 +86,23 @@ def collect_files(
 def read_file_content(file_path: Path, max_chars: int = None) -> str:
     """Read the content of a text file."""
     try:
+        # Return empty for binary files to avoid decoding issues
+        if is_binary_file(file_path):
+            return ""
         with file_path.open('r', encoding='utf-8', errors='ignore') as f:
             if max_chars:
                 return f.read(max_chars)
             return f.read()
     except (IOError, OSError, UnicodeDecodeError):
         return ""
+
+
+def get_file_size(file_path: Path) -> int:
+    """Get file size in bytes; return 0 if file doesn't exist or is inaccessible."""
+    try:
+        return file_path.stat().st_size
+    except (OSError, IOError):
+        return 0
 
 
 def format_file_size(size_bytes: int) -> str:
@@ -186,6 +197,8 @@ def should_include_file(
             return False
         
         # Check include patterns
+        if include_patterns is None:
+            include_patterns = ["*"]
         if not matches_pattern(file_path, include_patterns):
             return False
         

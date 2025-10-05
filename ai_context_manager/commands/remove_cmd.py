@@ -1,4 +1,5 @@
 """Remove files from context command."""
+import json
 import typer
 import yaml
 from pathlib import Path
@@ -31,6 +32,7 @@ def save_context(context):
 def files(
     paths: List[str] = typer.Argument(..., help="File or directory paths to remove"),
     all_files: bool = typer.Option(False, "--all", "-a", help="Remove all files from context"),
+    json_output: bool = typer.Option(False, "--json", help="Output results as JSON to stdout"),
 ):
     """Remove files from the current context."""
     context = load_context()
@@ -40,6 +42,15 @@ def files(
         removed_count = len(existing_files)
         context["files"] = []
         save_context(context)
+        if json_output:
+            result = {
+                "success": True,
+                "message": f"Removed all {removed_count} file(s) from context",
+                "removed_files": list(sorted(existing_files)),
+                "context": {"file_count": 0, "files": []},
+            }
+            typer.echo(json.dumps(result))
+            raise typer.Exit()
         typer.echo(f"Removed all {removed_count} files from context")
         return
     
@@ -64,8 +75,26 @@ def files(
     if removed_files:
         context["files"] = sorted(list(existing_files))
         save_context(context)
+        if json_output:
+            result = {
+                "success": True,
+                "message": f"Removed {len(removed_files)} file(s) from context",
+                "removed_files": removed_files,
+                "context": {"file_count": len(context["files"]), "files": context["files"]},
+            }
+            typer.echo(json.dumps(result))
+            raise typer.Exit()
         typer.echo(f"Removed {len(removed_files)} file(s) from context:")
         for file_path in removed_files:
             typer.echo(f"  - {file_path}")
     else:
+        if json_output:
+            result = {
+                "success": True,
+                "message": "No matching files found to remove",
+                "removed_files": [],
+                "context": {"file_count": len(sorted(list(existing_files))), "files": sorted(list(existing_files))},
+            }
+            typer.echo(json.dumps(result))
+            raise typer.Exit()
         typer.echo("No matching files found to remove")
