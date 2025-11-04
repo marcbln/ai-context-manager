@@ -105,6 +105,20 @@ def get_file_size(file_path: Path) -> int:
         return 0
 
 
+def get_file_size(file_path: Path) -> int:
+    """Get file size in bytes."""
+    try:
+        return file_path.stat().st_size
+    except (OSError, IOError):
+        return 0
+
+def get_file_size(file_path: Path) -> int:
+    """Get file size in bytes."""
+    try:
+        return file_path.stat().st_size
+    except (OSError, IOError):
+        return 0
+
 def format_file_size(size_bytes: int) -> str:
     """Format file size in human-readable format."""
     if size_bytes == 0:

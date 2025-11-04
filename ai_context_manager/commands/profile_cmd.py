@@ -11,6 +11,8 @@ from ai_context_manager.core.profile import Profile, PathEntry, ProfileManager
 from ai_context_manager.config import get_config_dir, CLI_CONTEXT_SETTINGS
 
 app = typer.Typer(help="Manage AI Context Manager selection profiles.", context_settings=CLI_CONTEXT_SETTINGS)
+
+__all__ = ['app', 'create_profile', 'list_profiles', 'show', 'load', 'delete_profile', 'update', 'export', 'import_profile']
 console = Console()
 
 
@@ -55,7 +57,7 @@ def save_session_context(context: Dict[str, Any]) -> None:
 
 
 @app.command()
-def create(
+def create_profile(
     name: str = typer.Argument(..., help="Name for the new profile."),
     paths: List[Path] = typer.Argument(..., help="File or directory paths to include in the profile."),
     description: Optional[str] = typer.Option(None, "--description", "-d", help="Description of the profile."),
