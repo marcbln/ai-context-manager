@@ -88,6 +88,30 @@ aicontext export session_output.md
 
 ---
 
+### Debugging Workflow with `aicontext debug`
+
+Quickly build a debugging context from a stack trace by parsing file paths, resolving them in your local project, and optionally exporting a ready-to-share context file.
+
+Example:
+
+```bash
+cat crash.log | aicontext debug from-trace --base-path /path/to/project -o debug_context.md
+```
+
+What it does:
+
+- Finds paths like `/path/to/file.py:123`, `in /srv/app/file.php line 89`, `at C:\\\project\\src\\main.ts:42`.
+- Resolves them relative to `--base-path` and adds them to the session context.
+- Optionally writes a markdown file that includes the original error trace at the top and the exported file contents below.
+
+Options:
+
+- `--base-path, -b` (required): local project root used to resolve paths.
+- `--output, -o` (optional): write a combined debug context file.
+- `--format, -f` (optional): export format (markdown, json, xml, yaml). The original trace is prepended when using markdown.
+
+---
+
 ## Full Command Reference
 
 ### Session Management
@@ -112,3 +136,10 @@ Profiles are reusable configurations stored in `~/.config/ai-context-manager/pro
   - `--format <fmt>`: Set format (markdown, json, xml, yaml).
   - `--model <name>`: Check token count against a specific model.
   - `--dry-run`: Preview the output without writing a file.
+
+### Debugging
+- `aicontext debug from-trace --base-path <path> [-o <output>] [--format <fmt>]`
+  - Reads a stack trace from stdin, resolves referenced files within `<path>`, updates the session, and optionally writes a combined debug context.
+  - `--base-path, -b` (required): project root for resolution.
+  - `--output, -o` (optional): write combined output (recommended: markdown).
+  - `--format, -f` (optional): export format (markdown, json, xml, yaml). Original trace is prepended only for markdown.

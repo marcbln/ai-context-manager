@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
+from functools import lru_cache
 
 
 class Config:
@@ -362,6 +363,7 @@ CLI_CONTEXT_SETTINGS = {
 }
 
 
+@lru_cache(maxsize=None)
 def get_config_dir() -> Path:
     """Get the XDG-compliant configuration directory for AI Context Manager.
     

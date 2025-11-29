@@ -1,6 +1,6 @@
 """Main CLI entry point for AI Context Manager."""
 
-__all__ = ['cli']
+__all__ = ['app', 'cli']
 
 import typer
 from rich.console import Console
@@ -12,6 +12,7 @@ from ai_context_manager.commands.list_cmd import app as list_app
 from ai_context_manager.commands.profile_cmd import app as profile_app
 from ai_context_manager.commands.remove_cmd import app as remove_app
 from ai_context_manager.commands.init_cmd import app as init_app
+from ai_context_manager.commands.debug_cmd import app as debug_app
 from ai_context_manager.config import CLI_CONTEXT_SETTINGS
 
 app = typer.Typer(
@@ -30,30 +31,35 @@ from ai_context_manager.commands import (
     list_cmd,
     profile_cmd,
     remove_cmd,
-    init_cmd
+    init_cmd,
+    debug_cmd
 )
 
 # Add subcommands
-cli.add_typer(init_app, name="init")
-cli.add_typer(add_app, name="add", help="Add files to the current session context")
-cli.add_typer(remove_app, name="remove", help="Remove files from the current session context")
-cli.add_typer(list_app, name="list", help="List files in the current session context")
-cli.add_typer(export_app, name="export", help="Export files to AI context format")
-cli.add_typer(profile_app, name="profile", help="Manage export profiles")
-cli.add_typer(import_app, name="import", help="Import files from directory structure")
+app.add_typer(init_app, name="init")
+app.add_typer(add_app, name="add", help="Add files to the current session context")
+app.add_typer(remove_app, name="remove", help="Remove files from the current session context")
+app.add_typer(list_app, name="list", help="List files in the current session context")
+app.add_typer(export_app, name="export", help="Export files to AI context format")
+app.add_typer(profile_app, name="profile", help="Manage export profiles")
+app.add_typer(import_app, name="import", help="Import files from directory structure")
+app.add_typer(debug_app, name="debug", help="Create a debug context from a stack trace")
 
 
-@cli.command()
+@app.command()
 def version():
     """Show version information."""
     console.print("AI Context Manager v0.1.0")
 
 
-@cli.callback()
+@app.callback()
 def main():
     """AI Context Manager - Export codebases for AI analysis."""
     pass
 
 
 if __name__ == "__main__":
-    cli()
+    app()
+
+# Backwards compatibility: some tests/tools may import `cli`
+cli = app
