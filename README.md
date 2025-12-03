@@ -26,6 +26,27 @@ AI Context Manager supports two primary workflows:
 1.  **Profile-based Workflow (Recommended)**: Create a named profile with your desired file paths and exclusion rules. Use this profile to generate context files consistently.
 2.  **Session-based Workflow**: Interactively add and remove files for a quick, one-time export without creating a permanent profile.
 
+### Interactive Selection & Generation
+
+Use the interactive TUI to visually select files and immediately generate a context file using Repomix.
+
+1. **Select Files**
+
+   ```bash
+   aicontext select start . -o my-selection.yaml
+   ```
+
+   Navigate with the arrow keys and toggle files/folders with `Enter`. The resulting YAML contains your `basePath`, `files`, and `folders` selections.
+
+2. **Generate Context via Repomix**
+
+   ```bash
+   # Requires repomix installed (npm install -g repomix)
+   aicontext generate repomix my-selection.yaml --output context.xml --style xml
+   ```
+
+   The `generate` command reads the YAML and orchestrates Repomix to build the final context file.
+
 ---
 
 ### Profile-based Workflow (Quick Start)

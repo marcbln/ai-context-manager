@@ -13,6 +13,8 @@ from ai_context_manager.commands.profile_cmd import app as profile_app
 from ai_context_manager.commands.remove_cmd import app as remove_app
 from ai_context_manager.commands.init_cmd import app as init_app
 from ai_context_manager.commands.debug_cmd import app as debug_app
+from ai_context_manager.commands.select_cmd import app as select_app
+from ai_context_manager.commands.generate_cmd import app as generate_app
 from ai_context_manager.config import CLI_CONTEXT_SETTINGS
 
 app = typer.Typer(
@@ -32,7 +34,9 @@ from ai_context_manager.commands import (
     profile_cmd,
     remove_cmd,
     init_cmd,
-    debug_cmd
+    debug_cmd,
+    select_cmd,
+    generate_cmd,
 )
 
 # Add subcommands
@@ -44,6 +48,8 @@ app.add_typer(export_app, name="export", help="Export files to AI context format
 app.add_typer(profile_app, name="profile", help="Manage export profiles")
 app.add_typer(import_app, name="import", help="Import files from directory structure")
 app.add_typer(debug_app, name="debug", help="Create a debug context from a stack trace")
+app.add_typer(select_app, name="select", help="Interactive selection TUI")
+app.add_typer(generate_app, name="generate", help="Generate context via external tools")
 
 
 @app.command()
