@@ -12,7 +12,7 @@ from textual.events import Mount
 from textual.widgets import Button, DirectoryTree, Footer, Header, Input, Label
 
 from ..config import CLI_CONTEXT_SETTINGS
-
+from rich.text import Text
 
 app = typer.Typer(help="Interactive file selection TUI", context_settings=CLI_CONTEXT_SETTINGS)
 
@@ -30,18 +30,28 @@ class SelectableDirectoryTree(DirectoryTree):
         node = event.node
         path = node.data.path
 
-        label_text = node.label.plain
-
+        # 1. Update the selection state
         if path in self.selected_paths:
             self.selected_paths.remove(path)
-            if label_text.startswith("[x] "):
-                node.set_label(label_text[4:])
-            node.remove_class("is-selected")
         else:
             self.selected_paths.add(path)
-            if not label_text.startswith("[x] "):
-                node.set_label(f"[x] {label_text}")
-            node.add_class("is-selected")
+
+        # 2. Reconstruct the label from the source filename
+        # This prevents the accumulation of "[bold green]" tags
+        label = Text(path.name)
+
+        # 3. Apply styling if selected
+        if path in self.selected_paths:
+            # Add prefix and apply bold green style to the whole label
+            label = Text.assemble("[x] ", label)
+            label.stylize("bold green")
+
+        # 4. Set the label using the Rich Text object
+        # This ensures styles are rendered correctly, not as literal text
+        node.set_label(label)
+
+
+
 
     def filter_tree(self, query: str) -> None:
         """Stub for future filtering support."""
