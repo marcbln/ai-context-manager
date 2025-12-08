@@ -193,8 +193,8 @@ def should_include_file(
     file_path: Path,
     include_patterns: List[str],
     exclude_patterns: List[str],
-    max_file_size: int,
-    include_binary: bool
+    max_file_size: int = 10_485_760,  # 10MB default
+    include_binary: bool = False
 ) -> bool:
     """Determine if a file should be included based on all criteria."""
     try:

@@ -109,9 +109,8 @@ class SelectionApp(App):
             self.exit(result=False)
 
     def action_save_and_quit(self) -> None:
-        """Save current selection to YAML file and exit."""
-        files: list[str] = []
-        folders: list[str] = []
+        """Save selection to YAML and exit."""
+        includes = []
 
         for path in self.tree_widget.selected_paths:
             try:
@@ -119,18 +118,14 @@ class SelectionApp(App):
             except ValueError:
                 rel_path = path
 
-            if path.is_file():
-                files.append(str(rel_path))
-            elif path.is_dir():
-                folders.append(str(rel_path))
+            # Add path to unified list
+            includes.append(str(rel_path))
 
-        files.sort()
-        folders.sort()
+        includes.sort()
 
         data = {
             "basePath": str(self.base_path.resolve()),
-            "files": files,
-            "folders": folders,
+            "include": includes,
         }
 
         with open(self.output_file, "w") as f:

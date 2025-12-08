@@ -16,11 +16,14 @@ def test_generate_repomix_success(tmp_path: Path) -> None:
     selection_file = tmp_path / "selection.yaml"
     data = {
         "basePath": str(tmp_path),
-        "files": ["main.py"],
-        "folders": ["src"],
+        "include": ["main.py", "src"],
     }
     with selection_file.open("w") as f:
         yaml.dump(data, f)
+    
+    # Create dummy files/dirs so is_dir() check works
+    (tmp_path / "src").mkdir()
+    (tmp_path / "main.py").touch()
 
     with patch("shutil.which", return_value="/usr/bin/repomix"), patch(
         "subprocess.run", return_value=MagicMock(returncode=0, stderr="")
@@ -56,4 +59,4 @@ def test_generate_missing_binary(tmp_path: Path) -> None:
         result = runner.invoke(app, ["generate", "repomix", str(selection_file)])
 
     assert result.exit_code == 1
-    assert "repomix' executable not found" in result.output
+    assert "Error: 'repomix' not found" in result.output
