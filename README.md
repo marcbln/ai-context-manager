@@ -40,10 +40,18 @@ Use the interactive TUI to visually select files and immediately generate a cont
 
 2. **Generate Context via Repomix**
 
-   ```bash
-   # Requires repomix installed (npm install -g repomix)
-   aicontext generate repomix my-selection.yaml --output context.xml --style xml
-   ```
+**Basic Usage:**
+```bash
+aicontext generate repomix my-selection.yaml --output context.xml
+```
+
+**Quick Usage (Auto-copy):**
+Generate to a temporary file and copy the file reference to your clipboard for immediate uploading.
+
+```bash
+# Requires xclip on Linux
+aicontext generate repomix my-selection.yaml --copy
+```
 
    The `generate` command reads the YAML and orchestrates Repomix to build the final context file.
 

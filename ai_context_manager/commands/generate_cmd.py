@@ -3,9 +3,12 @@ import shutil
 import subprocess
 import typer
 import yaml
+import tempfile
 from pathlib import Path
+from typing import Optional
 from rich.console import Console
 from ..config import CLI_CONTEXT_SETTINGS
+from ..utils.clipboard import copy_file_uri_to_clipboard
 
 app = typer.Typer(help="Generate context using repomix", context_settings=CLI_CONTEXT_SETTINGS)
 console = Console()
@@ -13,8 +16,9 @@ console = Console()
 @app.command("repomix")
 def generate_repomix(
     selection_file: Path = typer.Argument(..., help="Selection YAML file"),
-    output: Path = typer.Option("repomix-output.xml", "--output", "-o", help="Output file"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file. Defaults to a temp file if not set."),
     style: str = typer.Option("xml", "--style", help="Repomix output style (xml, markdown, plain)"),
+    copy: bool = typer.Option(False, "--copy", "-c", help="Copy the output file reference to system clipboard (requires xclip)."),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show repomix output"),
 ):
     """Execute repomix using the paths from selection.yaml."""
@@ -26,6 +30,18 @@ def generate_repomix(
     if not repomix_bin:
         console.print("[red]Error: 'repomix' not found. Run: npm install -g repomix[/red]")
         raise typer.Exit(1)
+
+    # 1. Handle Output Path Logic
+    if output is None:
+        # Generate a temporary filename based on the selection file name to be identifiable
+        # e.g., /tmp/acm__my_selection.xml
+        sanitized_name = selection_file.stem.replace(" ", "_")
+        temp_dir = Path(tempfile.gettempdir())
+        ext = "md" if style == "markdown" else "xml" if style == "xml" else "txt"
+        output = temp_dir / f"acm__{sanitized_name}.{ext}"
+        
+        # Ensure we are not silently overwriting something critical (unlikely in tmp but good practice)
+        # For this use case, overwriting previous temp context is actually desired behavior.
 
     try:
         with open(selection_file, "r") as f:
@@ -74,6 +90,12 @@ def generate_repomix(
 
     if result.returncode == 0:
         console.print(f"[green]Success! Context generated at: {output}[/green]")
+        
+        # 2. Handle Clipboard Logic
+        if copy:
+            if copy_file_uri_to_clipboard(output):
+                console.print(f"[bold green]File URI copied to clipboard![/bold green]")
+                console.print(f"[dim](Ready to paste into Claude/ChatGPT upload dialog)[/dim]")
     else:
         console.print("[red]Repomix failed.[/red]")
         if result.stderr:
