@@ -1,3 +1,5 @@
+# tests/commands/test_generate_cmd.py
+
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 import tempfile
@@ -6,7 +8,6 @@ import yaml
 from typer.testing import CliRunner
 
 from ai_context_manager.cli import app
-
 
 runner = CliRunner()
 
@@ -21,13 +22,17 @@ def test_generate_repomix_success(tmp_path: Path) -> None:
     }
     with selection_file.open("w") as f:
         yaml.dump(data, f)
-    
-    # Create dummy files/dirs so is_dir() check works
+
+    # Create dummy files/dirs so validation logic passes
     (tmp_path / "src").mkdir()
     (tmp_path / "main.py").touch()
 
+    # Create expected output file because the command now checks for it
+    output_file = tmp_path / "context.xml"
+    output_file.touch()
+
     with patch("shutil.which", return_value="/usr/bin/repomix"), patch(
-        "subprocess.run", return_value=MagicMock(returncode=0, stderr="")
+            "subprocess.run", return_value=MagicMock(returncode=0, stderr="")
     ) as mock_run:
         result = runner.invoke(
             app,
@@ -36,7 +41,7 @@ def test_generate_repomix_success(tmp_path: Path) -> None:
                 "repomix",
                 str(selection_file),
                 "--output",
-                "context.xml",
+                str(output_file),
             ],
         )
 
@@ -73,25 +78,30 @@ def test_generate_repomix_default_output_and_copy(tmp_path: Path) -> None:
     }
     with selection_file.open("w") as f:
         yaml.dump(data, f)
-    
+
     (tmp_path / "main.py").touch()
 
-    # Mock repomix, xclip check, and subprocess for xclip execution
-    with patch("shutil.which", side_effect=lambda x: "/usr/bin/xclip" if x == "xclip" else "/usr/bin/repomix"), \
-         patch("subprocess.run") as mock_run:
-        
-        mock_run.return_value = MagicMock(returncode=0, stderr="")
-        
-        result = runner.invoke(
-            app,
-            [
-                "generate",
-                "repomix",
-                str(selection_file),
-                "--copy", # Enable copy
-                # No output flag provided
-            ],
-        )
+    # Mock tempfile.gettempdir to ensure we know where the file is expected
+    # and mock the creation of that file so validation passes
+    with patch("tempfile.gettempdir", return_value=str(tmp_path)):
+        expected_output = tmp_path / "acm__selection.xml"
+
+        # Define side effect to create file when repomix 'runs'
+        def create_output(*args, **kwargs):
+            expected_output.touch()
+            return MagicMock(returncode=0, stderr="")
+
+        with patch("shutil.which", side_effect=lambda x: "/usr/bin/xclip" if x == "xclip" else "/usr/bin/repomix"), \
+                patch("subprocess.run", side_effect=create_output) as mock_run:
+            result = runner.invoke(
+                app,
+                [
+                    "generate",
+                    "repomix",
+                    str(selection_file),
+                    "--copy",
+                ],
+            )
 
     assert result.exit_code == 0
     assert "Success!" in result.output
@@ -102,12 +112,12 @@ def test_generate_repomix_default_output_and_copy(tmp_path: Path) -> None:
     repomix_call = mock_run.call_args_list[0]
     cmd_list = repomix_call[0][0]
     assert "repomix" in cmd_list
-    
-    # Check that output path is in temp directory
+
+    # Check that output path is in temp directory (which we mocked to tmp_path)
     output_arg_index = cmd_list.index("--output") + 1
     output_path = cmd_list[output_arg_index]
-    assert tempfile.gettempdir() in output_path
-    assert "acm__selection.xml" in output_path # based on filename
+    assert str(tmp_path) in output_path
+    assert "acm__selection.xml" in output_path
 
     # 2. Clipboard call
     clipboard_call = mock_run.call_args_list[1]
