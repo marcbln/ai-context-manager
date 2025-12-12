@@ -123,3 +123,59 @@ def test_generate_repomix_default_output_and_copy(tmp_path: Path) -> None:
     clipboard_call = mock_run.call_args_list[1]
     clip_cmd = clipboard_call[0][0]
     assert clip_cmd == ["xclip", "-selection", "clipboard", "-t", "text/uri-list"]
+
+
+def test_generate_multiple_selection_files(tmp_path: Path) -> None:
+    """Merges patterns from multiple selection files relative to first base path."""
+
+    root = tmp_path
+    sel1 = root / "sel1.yaml"
+    sel2 = root / "sel2.yaml"
+
+    data1 = {
+        "basePath": str(root),
+        "include": ["main.py"],
+    }
+    data2 = {
+        "basePath": str(root),
+        "include": ["docs"],
+    }
+
+    with sel1.open("w") as f:
+        yaml.dump(data1, f)
+    with sel2.open("w") as f:
+        yaml.dump(data2, f)
+
+    (root / "main.py").touch()
+    docs_dir = root / "docs"
+    docs_dir.mkdir()
+
+    output_file = root / "merged.xml"
+    output_file.touch()
+
+    with patch("shutil.which", return_value="/usr/bin/repomix"), patch(
+        "subprocess.run", return_value=MagicMock(returncode=0, stderr="")
+    ) as mock_run:
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "repomix",
+                str(sel1),
+                str(sel2),
+                "--output",
+                str(output_file),
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert "Success! Context generated" in result.output
+
+    args, kwargs = mock_run.call_args
+    cmd = args[0]
+    include_idx = cmd.index("--include") + 1
+    include_arg = cmd[include_idx]
+
+    assert "main.py" in include_arg
+    assert "docs/**" in include_arg
+    assert kwargs["cwd"] == Path(str(root))

@@ -46,6 +46,12 @@ Use the interactive TUI to visually select files and immediately generate a cont
 aicontext generate repomix my-selection.yaml --output context.xml
 ```
 
+**Merge Multiple Selections:**
+You can pass multiple selection files. They will be merged into a single context rooted at the first file's `basePath`.
+```bash
+aicontext generate repomix context/dashboard.yaml context/stats.yaml --output combined.xml
+```
+
 **Quick Usage (Auto-copy):**
 Generate to a temporary file and copy the file reference to your clipboard for immediate uploading.
 
