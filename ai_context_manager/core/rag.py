@@ -104,11 +104,13 @@ class RAGEngine:
         )
         q_vector = q_resp.data[0].embedding
 
-        search_result = self.qdrant.search(
+        # Compatibility: Use query_points for qdrant-client >= 1.10.0, fallback to search for older versions
+        search_result = self.qdrant.query_points(
             collection_name=self.collection_name,
-            query_vector=q_vector,
+            query=q_vector,
             limit=n_results,
-        )
+        ).points
+
 
         if not search_result:
             return "No relevant context found in the vector database."
