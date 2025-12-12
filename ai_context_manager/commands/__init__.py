@@ -1,2 +1,5 @@
 """Expose command interfaces."""
-# This file can be empty or just expose the modules if needed dynamically.
+
+from . import select_cmd, export_cmd, generate_cmd, chat_cmd
+
+__all__ = ["select_cmd", "export_cmd", "generate_cmd", "chat_cmd"]

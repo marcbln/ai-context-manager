@@ -1,7 +1,7 @@
 """Main CLI entry point."""
 import typer
 from rich.console import Console
-from ai_context_manager.commands import select_cmd, export_cmd, generate_cmd
+from ai_context_manager.commands import select_cmd, export_cmd, generate_cmd, chat_cmd
 from ai_context_manager.config import CLI_CONTEXT_SETTINGS
 
 app = typer.Typer(
@@ -15,6 +15,7 @@ console = Console()
 app.add_typer(select_cmd.app, name="select", help="Open visual file selector")
 app.add_typer(export_cmd.app, name="export", help="Native: Generate context from selection.yaml")
 app.add_typer(generate_cmd.app, name="generate", help="Repomix: Generate context using external tool")
+app.add_typer(chat_cmd.app, name="chat", help="RAG: Index selections & ask questions")
 
 @app.command()
 def version():

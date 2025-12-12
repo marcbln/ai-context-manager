@@ -109,7 +109,14 @@ class Config:
             "token_counter": {
                 "encoding": "cl100k_base",
                 "show_details": True
-            }
+            },
+            "ai": {
+                "openai_api_key": "",
+                "model": "gpt-4-turbo",
+                "embedding_model": "text-embedding-3-small",
+                "qdrant_url": "http://localhost:6333",
+                "collection_name": "ai_context_manager_docs"
+            },
         }
         self.save()
     

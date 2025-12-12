@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AI Documentation Frontmatter",
+  "description": "Standard metadata for AI-generated documentation files.",
+  "type": "object",
+  "required": ["status", "last_edit_date"],
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Overrides the H1 if needed, useful for UI display."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "review", "stable", "deprecated"],
+      "description": "The current lifecycle state of this document."
+    },
+    "last_edit_date": {
+      "type": "string",
+      "format": "date",
+      "description": "YYYY-MM-DD format."
+    },
+    "reviewed_by": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of AI models or humans who have validated this document."
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Keywords for categorization."
+    },
+    "description": {
+      "type": "string",
+      "description": "Brief summary used for RAG retrieval context."
+    }
+  }
+}

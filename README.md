@@ -17,6 +17,7 @@ A command-line tool for selecting files from your codebase and exporting them in
 uv venv
 source .venv/bin/activate
 uv pip install -e .
+uv pip install -e ".[ai]"
 ```
 
 ## Workflows
@@ -54,6 +55,21 @@ aicontext generate repomix my-selection.yaml --copy
 ```
 
    The `generate` command reads the YAML and orchestrates Repomix to build the final context file.
+
+### Chat & RAG
+
+AI Context Manager can now index your selections into Qdrant and let you query them with OpenAI models. See [docs/rag.md](docs/rag.md) for setup and more examples.
+
+```bash
+# Index selected files
+aicontext chat index selection.yaml
+
+# Ask a question
+aicontext chat ask "Where is Selection.load defined?"
+
+# Show the documentation frontmatter schema
+aicontext chat schema
+```
 
 ---
 
