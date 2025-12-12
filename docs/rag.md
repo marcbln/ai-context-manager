@@ -37,6 +37,7 @@ aicontext chat ask
 # Single question
 aicontext chat ask "How does the Selector class work?"
 ```
+The output will display the generated answer followed by a list of source files used as context.
 
 ### 3. Frontmatter schema
 Give downstream AI agents the canonical JSON schema for documentation frontmatter:

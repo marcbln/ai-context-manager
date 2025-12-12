@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from typing import List
+from typing import List, Dict, Any
 from pathlib import Path
 
 try:  # Optional heavy deps
@@ -97,7 +97,7 @@ class RAGEngine:
         self.qdrant.upsert(collection_name=self.collection_name, points=points)
         return len(points)
 
-    def query(self, question: str, n_results: int = 5) -> str:
+    def query(self, question: str, n_results: int = 5) -> Dict[str, Any]:
         q_resp = self.openai.embeddings.create(
             model=self.embedding_model,
             input=question,
@@ -113,7 +113,19 @@ class RAGEngine:
 
 
         if not search_result:
-            return "No relevant context found in the vector database."
+            return {
+                "answer": "No relevant context found in the vector database.",
+                "sources": []
+            }
+
+        # Extract sources
+        sources = []
+        for res in search_result:
+            sources.append({
+                "filename": res.payload.get("filename"),
+                "path": res.payload.get("path"),
+                "score": res.score
+            })
 
         context_str = "\n\n---\n\n".join(
             [f"File: {res.payload['filename']}\nContent:\n{res.payload['text']}" for res in search_result]
@@ -134,7 +146,10 @@ class RAGEngine:
             ],
         )
 
-        return response.choices[0].message.content
+        return {
+            "answer": response.choices[0].message.content,
+            "sources": sources
+        }
 
     def _chunk_text(self, text: str, chunk_size: int = 1500) -> List[str]:
         raw_chunks = text.split("\n\n")

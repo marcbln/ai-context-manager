@@ -75,8 +75,23 @@ def ask_cmd(
 
     def _ask(q: str) -> None:
         with console.status("[bold blue]Thinking..."):
-            answer = engine.query(q)
-        console.print(Markdown(answer))
+            result = engine.query(q)
+        
+        # Print Answer
+        console.print(Markdown(result["answer"]))
+        
+        # Print Sources
+        sources = result.get("sources", [])
+        if sources:
+            console.print()
+            console.print("[bold]Sources:[/bold]")
+            seen = set()
+            for source in sources:
+                path = source.get("path")
+                # Deduplicate based on path to avoid listing same file multiple times if multiple chunks matched
+                if path and path not in seen:
+                    console.print(f" • [cyan]{source.get('filename')}[/cyan] [dim]({path})[/dim]")
+                    seen.add(path)
 
     if question:
         _ask(question)
