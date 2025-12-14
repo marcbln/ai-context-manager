@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import typer
 import yaml
@@ -40,16 +40,53 @@ def generate_repomix(
         console.print("[red]Error: 'repomix' not found. Run: npm install -g repomix[/red]")
         raise typer.Exit(1)
 
+    def _wrap_content(content: dict) -> dict:
+        return {"content": content}
+
+    def _extract_content(doc: Any) -> Optional[dict]:
+        if not isinstance(doc, dict):
+            return None
+
+        content = doc.get("content")
+        if isinstance(content, dict):
+            return _wrap_content(content)
+
+        if "basePath" in doc or "include" in doc:
+            return _wrap_content(doc)
+
+        return None
+
     def _load_selection(path: Path) -> dict:
         try:
-            with open(path, "r") as file:
-                return yaml.safe_load(file) or {}
+            with open(path, "r", encoding="utf-8") as file:
+                documents = [doc for doc in yaml.safe_load_all(file)]
         except Exception as exc:
             console.print(f"[red]Error parsing {path}: {exc}[/red]")
             raise typer.Exit(1)
 
+        # Prefer documents that contain the actual content definition
+        for doc in documents:
+            content = _extract_content(doc)
+            if content:
+                return content
+
+        # Fallback: first dict document
+        for doc in documents:
+            if isinstance(doc, dict):
+                return _wrap_content(doc)
+
+        return {"content": {}}
+
+    def _ensure_content(node: dict, field: str, file: Path) -> Any:
+        if "content" not in node or field not in node["content"]:
+            console.print(
+                f"[red]Error: {file} does not match the required schema (missing content.{field}).[/red]"
+            )
+            raise typer.Exit(1)
+        return node["content"][field]
+
     first_data = _load_selection(selection_files[0])
-    execution_root = Path(first_data.get("basePath", ".")).resolve()
+    execution_root = Path(_ensure_content(first_data, "basePath", selection_files[0])).resolve()
 
     if verbose:
         console.print(f"[dim]Using Base Path: {execution_root}[/dim]")
@@ -70,31 +107,25 @@ def generate_repomix(
 
     output = output.resolve()
 
-    def _gather_includes(data: dict) -> List[str]:
-        includes: List[str] = []
-        for key in ("include", "files", "folders"):
-            values = data.get(key) or []
-            includes.extend(values)
-        return includes
-
     final_patterns: List[str] = []
 
     for sel_file in selection_files:
         data = _load_selection(sel_file)
-        current_base = Path(data.get("basePath", ".")).resolve()
 
-        includes = _gather_includes(data)
+        raw_base = _ensure_content(data, "basePath", sel_file)
+        include_items = _ensure_content(data, "include", sel_file)
+
+        if Path(raw_base).is_absolute():
+            current_base = Path(raw_base).resolve()
+        else:
+            current_base = (sel_file.parent / raw_base).resolve()
+
         if verbose:
-            console.print(f"[dim]Processing {sel_file} ({len(includes)} entries)[/dim]")
+            console.print(f"[dim]Processing {sel_file} ({len(include_items)} entries)[/dim]")
 
-        for raw_item in includes:
-            item = str(raw_item)
+        for item in include_items:
             path_obj = Path(item)
-            if path_obj.is_absolute():
-                full_path = path_obj
-            else:
-                full_path = (current_base / path_obj).resolve()
-
+            full_path = path_obj if path_obj.is_absolute() else (current_base / path_obj).resolve()
             is_dir = full_path.exists() and full_path.is_dir()
 
             try:

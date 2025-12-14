@@ -17,6 +17,7 @@ dependencies = [
     "textual>=0.70.0",
     "pytest>=8.4.1",
     "pytest-cov>=6.2.1",
+    "jsonschema>=4.0.0",
 ]
 
 [project.scripts]

@@ -1,5 +1,7 @@
 """Interactive TUI for selecting files and folders."""
 
+from datetime import date
+import getpass
 from pathlib import Path
 from typing import Dict, Set
 
@@ -109,7 +111,7 @@ class SelectionApp(App):
             self.exit(result=False)
 
     def action_save_and_quit(self) -> None:
-        """Save selection to YAML and exit."""
+        """Save selection to YAML strictly adhering to the schema and exit."""
         includes = []
 
         for path in self.tree_widget.selected_paths:
@@ -118,17 +120,50 @@ class SelectionApp(App):
             except ValueError:
                 rel_path = path
 
-            # Add path to unified list
             includes.append(str(rel_path))
 
         includes.sort()
 
-        data = {
-            "basePath": str(self.base_path.resolve()),
-            "include": includes,
+        current_user = getpass.getuser()
+        today_str = date.today().isoformat()
+
+        meta_data = {
+            "description": "Context selection",
+            "createdAt": today_str,
+            "createdBy": current_user,
+            "updatedAt": today_str,
+            "updatedBy": current_user,
+            "documentType": "CONTEXT_DEFINITION",
+            "tags": ["auto-generated"],
+            "version": "v1",
         }
 
-        with open(self.output_file, "w") as f:
+        if self.output_file.exists():
+            try:
+                with open(self.output_file, "r", encoding="utf-8") as f:
+                    existing = yaml.safe_load(f) or {}
+            except Exception:
+                existing = {}
+
+            existing_meta = existing.get("meta")
+            if isinstance(existing_meta, dict):
+                meta_data["createdAt"] = existing_meta.get("createdAt", meta_data["createdAt"])
+                meta_data["createdBy"] = existing_meta.get("createdBy", meta_data["createdBy"])
+                meta_data["description"] = existing_meta.get("description", meta_data["description"])
+                meta_data["tags"] = existing_meta.get("tags", meta_data["tags"])
+                meta_data["version"] = existing_meta.get("version", meta_data["version"])
+                meta_data["updatedAt"] = today_str
+                meta_data["updatedBy"] = current_user
+
+        data = {
+            "meta": meta_data,
+            "content": {
+                "basePath": str(self.base_path.resolve()),
+                "include": includes,
+            },
+        }
+
+        with open(self.output_file, "w", encoding="utf-8") as f:
             yaml.dump(data, f, sort_keys=False)
 
         self.exit(result=True)

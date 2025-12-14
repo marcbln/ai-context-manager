@@ -111,11 +111,22 @@ class ContextExporter:
     def _export_markdown(self, files: List[Path], summary: Dict[str, Any]) -> str:
         lines = []
         lines.append("# AI Context Export")
-        lines.append(f"Generated on: {datetime.datetime.now().isoformat()}")
+
+        meta = self.selection.meta
+        lines.append("## Metadata")
+        lines.append(f"- **Description**: {meta.description}")
+        lines.append(f"- **Type**: {meta.documentType}")
+        lines.append(f"- **Created**: {meta.createdAt} by {meta.createdBy}")
+        lines.append(f"- **Updated**: {meta.updatedAt} by {meta.updatedBy}")
+        if meta.tags:
+            lines.append(f"- **Tags**: {', '.join(meta.tags)}")
+        if meta.version:
+            lines.append(f"- **Version**: {meta.version}")
         lines.append("")
         lines.append("## Summary")
         lines.append(f"- **Total Files**: {summary['total_files']}")
         lines.append(f"- **Total Size**: {summary['total_size_human']}")
+        lines.append(f"Generated on: {datetime.datetime.now().isoformat()}")
         lines.append("")
         lines.append("## File Contents")
         lines.append("")
