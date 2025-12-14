@@ -41,9 +41,15 @@ Use the interactive TUI to visually select files and immediately generate a cont
 
 2. **Generate Context via Repomix**
 
-**Basic Usage:**
+**Basic Usage (Specific Files):**
 ```bash
 aicontext generate repomix my-selection.yaml --output context.xml
+```
+
+**Tag-Based Generation (Dynamic):**
+Point to a directory of definition files and filter by tags. Matching files are merged automatically.
+```bash
+aicontext generate repomix --dir ./ai-context-definitions --tag stats --tag dashboard --copy
 ```
 
 **Merge Multiple Selections:**

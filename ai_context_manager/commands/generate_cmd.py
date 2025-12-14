@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Set
 
 import typer
 import yaml
@@ -113,9 +113,58 @@ def _ensure_content(node: dict, field: str, file: Path) -> Any:
     return node["content"][field]
 
 
+def _find_files_by_tags(directory: Path, tags: List[str], verbose: bool = False) -> List[Path]:
+    """
+    Scan a directory and return YAML files whose meta.tags intersect the requested tags.
+    """
+    matches: List[Path] = []
+    required_tags: Set[str] = set(tags)
+
+    if not directory.exists() or not directory.is_dir():
+        console.print(f"[red]Error: Directory {directory} not found.[/red]")
+        raise typer.Exit(1)
+
+    candidates = list(directory.glob("*.yaml")) + list(directory.glob("*.yml"))
+
+    if verbose:
+        console.print(
+            f"[dim]Scanning {len(candidates)} files in {directory} for tags: {', '.join(tags)}[/dim]"
+        )
+
+    for file_path in candidates:
+        try:
+            data = _load_selection(file_path)
+        except Exception:
+            if verbose:
+                console.print(f"[yellow]  Skipping {file_path.name} (Parsing error)[/yellow]")
+            continue
+
+        file_meta = data.get("meta", {})
+        file_tags = set(file_meta.get("tags", []))
+
+        if required_tags.isdisjoint(file_tags):
+            continue
+
+        matches.append(file_path)
+        if verbose:
+            console.print(
+                f"[dim]  [green]Match:[/green] {file_path.name} (Tags: {', '.join(file_tags)})[/dim]"
+            )
+
+    return sorted(matches)
+
+
 @app.command("repomix")
 def generate_repomix(
-    selection_files: List[Path] = typer.Argument(..., help="One or more selection YAML files"),
+    selection_files: Optional[List[Path]] = typer.Argument(
+        None, help="Specific selection YAML files"
+    ),
+    context_dir: Optional[Path] = typer.Option(
+        None, "--dir", "-d", help="Directory to scan for context definitions"
+    ),
+    tags: Optional[List[str]] = typer.Option(
+        None, "--tag", "-t", help="Tags to filter by (requires --dir)"
+    ),
     output: Optional[Path] = typer.Option(
         None, "--output", "-o", help="Output file. Defaults to a temp file if not set."
     ),
@@ -125,8 +174,34 @@ def generate_repomix(
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed execution info and repomix output"),
 ):
-    """Execute repomix using the paths from one or more selection.yaml files."""
-    for file_path in selection_files:
+    """
+    Execute repomix using selection files, or discover them via directory + tags.
+    """
+    final_selection_files: List[Path] = []
+
+    if selection_files:
+        final_selection_files.extend(selection_files)
+
+    if context_dir and tags:
+        discovered = _find_files_by_tags(context_dir, tags, verbose)
+        if not discovered:
+            console.print(
+                f"[yellow]No files found in {context_dir} matching tags: {', '.join(tags)}[/yellow]"
+            )
+            raise typer.Exit(1)
+        final_selection_files.extend(discovered)
+    elif context_dir and not tags:
+        console.print("[red]Error: When using --dir, you must provide at least one --tag.[/red]")
+        raise typer.Exit(1)
+
+    if not final_selection_files:
+        console.print("[red]Error: No selection files provided. Pass files or use --dir with --tag.[/red]")
+        raise typer.Exit(1)
+
+    # Deduplicate while keeping deterministic order
+    final_selection_files = list(dict.fromkeys(final_selection_files))
+
+    for file_path in final_selection_files:
         if not file_path.exists():
             console.print(f"[red]Error: {file_path} not found.[/red]")
             raise typer.Exit(1)
@@ -136,8 +211,8 @@ def generate_repomix(
         console.print("[red]Error: 'repomix' not found. Run: npm install -g repomix[/red]")
         raise typer.Exit(1)
 
-    first_data = _load_selection(selection_files[0])
-    execution_root = Path(_ensure_content(first_data, "basePath", selection_files[0])).resolve()
+    first_data = _load_selection(final_selection_files[0])
+    execution_root = Path(_ensure_content(first_data, "basePath", final_selection_files[0])).resolve()
 
     if verbose:
         console.print(f"[dim]Using Base Path: {execution_root}[/dim]")
@@ -148,10 +223,13 @@ def generate_repomix(
 
     # 1. Handle Output Path Logic
     if output is None:
-        primary_file = selection_files[0]
-        sanitized_name = primary_file.stem.replace(" ", "_")
-        if len(selection_files) > 1:
-            sanitized_name = f"{sanitized_name}_merged"
+        if tags:
+            sanitized_name = f"context_{'_'.join(tags)}"
+        else:
+            primary_file = final_selection_files[0]
+            sanitized_name = primary_file.stem.replace(" ", "_")
+            if len(final_selection_files) > 1:
+                sanitized_name = f"{sanitized_name}_merged"
         temp_dir = Path(tempfile.gettempdir())
         ext = "md" if style == "markdown" else "xml" if style == "xml" else "txt"
         output = temp_dir / f"acm__{sanitized_name}.{ext}"
@@ -160,7 +238,7 @@ def generate_repomix(
 
     final_patterns: List[str] = []
 
-    for sel_file in selection_files:
+    for sel_file in final_selection_files:
         data = _load_selection(sel_file)
 
         if data.get("meta"):

@@ -110,7 +110,7 @@ def test_generate_repomix_default_output_and_copy(tmp_path: Path) -> None:
     # 1. Repomix call
     repomix_call = mock_run.call_args_list[0]
     cmd_list = repomix_call[0][0]
-    assert "repomix" in cmd_list
+    assert any(part == "repomix" or part.endswith("/repomix") for part in cmd_list)
 
     # Check that output path is in temp directory (which we mocked to tmp_path)
     output_arg_index = cmd_list.index("--output") + 1
