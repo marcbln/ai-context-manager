@@ -34,6 +34,21 @@ Implemented directory + tag discovery for the `generate repomix` command. Users 
 - `_find_files_by_tags` scans YAML definitions, loads metadata once, and matches when tag sets intersect (OR logic).
 - Default output filenames reuse the tag list when discovery is used, keeping generated files descriptive.
 
+## Usage Examples
+```bash
+# Discover files tagged 'api' or 'backend' in ./definitions and merge them
+aicontext generate repomix --dir ./definitions --tag api --tag backend
+
+# Generate from tags and copy file URI to clipboard
+aicontext generate repomix --dir ./ai-context-definitions --tag stats --tag dashboard --copy
+
+# Traditional explicit file usage (unchanged)
+aicontext generate repomix selection.yaml --output context.xml
+
+# Merge explicit files with tag-discovered files
+aicontext generate repomix base.yaml --dir ./definitions --tag utils
+```
+
 ## Verification
 - `uv run pytest tests/commands/test_generate_cmd.py tests/commands/test_generate_tags.py`
   - All tests (existing + new coverage) pass.
