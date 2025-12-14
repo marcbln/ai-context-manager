@@ -17,6 +17,102 @@ from ..utils.clipboard import copy_file_uri_to_clipboard
 app = typer.Typer(help="Generate context using repomix", context_settings=CLI_CONTEXT_SETTINGS)
 console = Console()
 
+_METADATA_HINT_KEYS = {
+    "description",
+    "documentType",
+    "createdAt",
+    "createdBy",
+    "updatedAt",
+    "updatedBy",
+    "tags",
+    "owners",
+    "project",
+}
+
+
+def _print_metadata(meta: dict, filename: str) -> None:
+    """Print extracted metadata to the console."""
+    if not meta:
+        return
+
+    console.print(f"[bold blue]Processing: {filename}[/bold blue]")
+
+    description = meta.get("description")
+    if description:
+        console.print(f"  Description: [green]{description}[/green]")
+
+    if "updatedAt" in meta:
+        by = f" by {meta['updatedBy']}" if meta.get("updatedBy") else ""
+        console.print(f"  Updated:     {meta['updatedAt']}{by}")
+    elif "createdAt" in meta:
+        by = f" by {meta['createdBy']}" if meta.get("createdBy") else ""
+        console.print(f"  Created:     {meta['createdAt']}{by}")
+
+    console.print()
+
+
+def _load_selection(path: Path) -> dict:
+    """
+    Load YAML, handling multi-document streams (Metadata + Content).
+    Returns normalized dict: {'meta': {}, 'content': {}}
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as file:
+            documents = list(yaml.safe_load_all(file))
+    except Exception as exc:
+        console.print(f"[red]Error parsing {path}: {exc}[/red]")
+        raise typer.Exit(1)
+
+    final_data: dict[str, dict[str, Any]] = {"meta": {}, "content": {}}
+
+    for doc in documents:
+        if not isinstance(doc, dict):
+            continue
+
+        if "meta" in doc and "content" in doc:
+            meta_section = doc.get("meta") or {}
+            content_section = doc.get("content") or {}
+            final_data["meta"] = dict(meta_section) if isinstance(meta_section, dict) else {}
+            final_data["content"] = dict(content_section) if isinstance(content_section, dict) else {}
+            break
+
+        has_content_keys = any(key in doc for key in ("basePath", "include", "content"))
+        if has_content_keys:
+            if isinstance(doc.get("content"), dict):
+                final_data["content"].update(doc["content"])
+                if isinstance(doc.get("meta"), dict):
+                    final_data["meta"].update(doc["meta"])
+            else:
+                for key, value in doc.items():
+                    if key == "meta":
+                        if isinstance(value, dict):
+                            final_data["meta"].update(value)
+                        continue
+                    final_data["content"][key] = value
+                for key, value in doc.items():
+                    if key not in {"basePath", "include", "content", "meta"}:
+                        final_data["meta"][key] = value
+            continue
+
+        meta_payload = doc.get("meta")
+        if isinstance(meta_payload, dict):
+            final_data["meta"].update(meta_payload)
+        else:
+            if _METADATA_HINT_KEYS.intersection(doc.keys()):
+                final_data["meta"].update(doc)
+
+    return final_data
+
+
+def _ensure_content(node: dict, field: str, file: Path) -> Any:
+    if "content" not in node or field not in node["content"]:
+        console.print(
+            f"[red]Error: {file} does not match the required schema (missing content.{field}).[/red]"
+        )
+        raise typer.Exit(1)
+    return node["content"][field]
+
+
 @app.command("repomix")
 def generate_repomix(
     selection_files: List[Path] = typer.Argument(..., help="One or more selection YAML files"),
@@ -39,51 +135,6 @@ def generate_repomix(
     if not repomix_bin:
         console.print("[red]Error: 'repomix' not found. Run: npm install -g repomix[/red]")
         raise typer.Exit(1)
-
-    def _wrap_content(content: dict) -> dict:
-        return {"content": content}
-
-    def _extract_content(doc: Any) -> Optional[dict]:
-        if not isinstance(doc, dict):
-            return None
-
-        content = doc.get("content")
-        if isinstance(content, dict):
-            return _wrap_content(content)
-
-        if "basePath" in doc or "include" in doc:
-            return _wrap_content(doc)
-
-        return None
-
-    def _load_selection(path: Path) -> dict:
-        try:
-            with open(path, "r", encoding="utf-8") as file:
-                documents = [doc for doc in yaml.safe_load_all(file)]
-        except Exception as exc:
-            console.print(f"[red]Error parsing {path}: {exc}[/red]")
-            raise typer.Exit(1)
-
-        # Prefer documents that contain the actual content definition
-        for doc in documents:
-            content = _extract_content(doc)
-            if content:
-                return content
-
-        # Fallback: first dict document
-        for doc in documents:
-            if isinstance(doc, dict):
-                return _wrap_content(doc)
-
-        return {"content": {}}
-
-    def _ensure_content(node: dict, field: str, file: Path) -> Any:
-        if "content" not in node or field not in node["content"]:
-            console.print(
-                f"[red]Error: {file} does not match the required schema (missing content.{field}).[/red]"
-            )
-            raise typer.Exit(1)
-        return node["content"][field]
 
     first_data = _load_selection(selection_files[0])
     execution_root = Path(_ensure_content(first_data, "basePath", selection_files[0])).resolve()
@@ -111,6 +162,9 @@ def generate_repomix(
 
     for sel_file in selection_files:
         data = _load_selection(sel_file)
+
+        if data.get("meta"):
+            _print_metadata(data["meta"], sel_file.name)
 
         raw_base = _ensure_content(data, "basePath", sel_file)
         include_items = _ensure_content(data, "include", sel_file)

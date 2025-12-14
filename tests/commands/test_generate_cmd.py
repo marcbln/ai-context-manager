@@ -2,7 +2,6 @@
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-import tempfile
 
 import yaml
 from typer.testing import CliRunner
@@ -179,3 +178,54 @@ def test_generate_multiple_selection_files(tmp_path: Path) -> None:
     assert "main.py" in include_arg
     assert "docs/**" in include_arg
     assert kwargs["cwd"] == Path(str(root))
+
+
+def test_generate_multidoc_prints_metadata(tmp_path: Path) -> None:
+    """Supports multi-document YAML and prints metadata to console."""
+
+    selection_file = tmp_path / "selection.yaml"
+    meta_doc = {
+        "description": "Docs context",
+        "createdAt": "2025-12-10",
+        "createdBy": "tester",
+    }
+    content_doc = {
+        "content": {
+            "basePath": str(tmp_path),
+            "include": ["main.py"],
+        }
+    }
+    selection_file.write_text(
+        "---\n"
+        + yaml.safe_dump(meta_doc, sort_keys=False)
+        + "---\n"
+        + yaml.safe_dump(content_doc, sort_keys=False),
+        encoding="utf-8",
+    )
+
+    (tmp_path / "main.py").touch()
+    output_file = tmp_path / "context.xml"
+
+    def create_output(*args, **kwargs):
+        output_file.touch()
+        return MagicMock(returncode=0, stderr="")
+
+    with patch("shutil.which", return_value="/usr/bin/repomix"), patch(
+        "subprocess.run", side_effect=create_output
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "repomix",
+                str(selection_file),
+                "--output",
+                str(output_file),
+            ],
+        )
+
+    assert result.exit_code == 0
+    output_text = result.output
+    assert "Processing: selection.yaml" in output_text
+    assert "Description: Docs context" in output_text
+    assert "Created:     2025-12-10 by tester" in output_text
