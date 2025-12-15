@@ -307,12 +307,6 @@ def generate_repomix(
     """
     Execute repomix using selection files, or discover them via directory + tags.
     """
-    # Validate style parameter
-    valid_styles = {"xml", "markdown", "plain"}
-    if style not in valid_styles:
-        console.print(f"[red]Error: Invalid style '{style}'. Valid options are: {', '.join(sorted(valid_styles))}[/red]")
-        raise typer.Exit(1)
-
     final_selection_files: List[Path] = []
 
     if selection_files:
