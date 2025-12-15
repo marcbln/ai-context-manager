@@ -32,7 +32,30 @@ _METADATA_HINT_KEYS = {
 }
 
 
-def _print_metadata(meta: dict, filename: str) -> None:
+def _count_files_and_folders(include_items: List[str], base_path: Path) -> tuple[int, int]:
+    """
+    Count files and folders in a selection's include list.
+    Returns: (file_count, folder_count)
+    """
+    file_count = 0
+    folder_count = 0
+    
+    for item in include_items:
+        path_obj = Path(item)
+        full_path = path_obj if path_obj.is_absolute() else (base_path / path_obj).resolve()
+        
+        if not full_path.exists():
+            continue
+            
+        if full_path.is_file():
+            file_count += 1
+        elif full_path.is_dir():
+            folder_count += 1
+    
+    return file_count, folder_count
+
+
+def _print_metadata(meta: dict, filename: str, file_count: int = 0, folder_count: int = 0) -> None:
     """Print extracted metadata to the console."""
     if not meta:
         return
@@ -49,6 +72,11 @@ def _print_metadata(meta: dict, filename: str) -> None:
     elif "createdAt" in meta:
         by = f" by {meta['createdBy']}" if meta.get("createdBy") else ""
         console.print(f"  Created:     {meta['createdAt']}{by}")
+
+    # Show file/folder counts if provided
+    if file_count > 0 or folder_count > 0:
+        console.print(f"  Files:       [cyan]{file_count}[/cyan]")
+        console.print(f"  Folders:     [cyan]{folder_count}[/cyan]")
 
     console.print()
 
@@ -321,7 +349,19 @@ def generate_repomix(
         data = _load_selection(sel_file)
 
         if data.get("meta"):
-            _print_metadata(data["meta"], sel_file.name)
+            # Compute file/folder counts
+            include_items = _ensure_content(data, "include", sel_file)
+            raw_base = _ensure_content(data, "basePath", sel_file)
+            
+            if Path(raw_base).is_absolute():
+                current_base = Path(raw_base).resolve()
+            else:
+                current_base = (sel_file.parent / raw_base).resolve()
+            
+            file_count, folder_count = _count_files_and_folders(include_items, current_base)
+            _print_metadata(data["meta"], sel_file.name, file_count, folder_count)
+        else:
+            _print_metadata({}, sel_file.name)
 
         raw_base = _ensure_content(data, "basePath", sel_file)
         include_items = _ensure_content(data, "include", sel_file)

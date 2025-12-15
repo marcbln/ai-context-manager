@@ -1,5 +1,6 @@
 # tests/commands/test_generate_cmd.py
 
+import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -229,3 +230,75 @@ def test_generate_multidoc_prints_metadata(tmp_path: Path) -> None:
     assert "Processing: selection.yaml" in output_text
     assert "Description: Docs context" in output_text
     assert "Created:     2025-12-10 by tester" in output_text
+
+
+def test_count_files_and_folders():
+    """Test the file/folder counting logic."""
+    from ai_context_manager.commands.generate_cmd import _count_files_and_folders
+    from pathlib import Path
+    
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        base = Path(tmp_dir)
+        
+        # Create test structure
+        test_file = base / "test.txt"
+        test_file.write_text("content")
+        
+        test_dir = base / "subdir"
+        test_dir.mkdir()
+        
+        # Test counting
+        file_count, folder_count = _count_files_and_folders(["test.txt", "subdir"], base)
+        assert file_count == 1
+        assert folder_count == 1
+        
+        # Test non-existent paths (should be ignored)
+        file_count, folder_count = _count_files_and_folders(["nonexistent.txt"], base)
+        assert file_count == 0
+        assert folder_count == 0
+
+
+def test_generate_repomix_shows_counts(capsys, tmp_path):
+    """Test that generate repomix shows file/folder counts."""
+    from ai_context_manager.cli import app
+    from typer.testing import CliRunner
+    
+    # Create test selection file
+    selection_file = tmp_path / "test.yaml"
+    selection_content = """---
+meta:
+  description: "Test selection"
+  updatedAt: "2025-12-15"
+  updatedBy: "Test User"
+---
+content:
+  basePath: "."
+  include:
+    - "README.md"
+    - "src/"
+"""
+    selection_file.write_text(selection_content)
+    
+    # Create mock files
+    (tmp_path / "README.md").write_text("# Test")
+    (tmp_path / "src").mkdir()
+    
+    # Create expected output file
+    output_file = tmp_path / "context.xml"
+    output_file.touch()
+    
+    # Run command (mock repomix to avoid dependency)
+    with patch('shutil.which', return_value="/usr/bin/repomix"), \
+         patch('subprocess.run') as mock_run:
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stderr = ""
+        
+        runner = CliRunner()
+        result = runner.invoke(app, ["generate", "repomix", str(selection_file), "--output", str(output_file)])
+        
+        assert result.exit_code == 0
+        output_text = result.output
+        assert "Files:" in output_text
+        assert "Folders:" in output_text
+        assert "1" in output_text  # Should show 1 file
+        assert "1" in output_text  # Should show 1 folder

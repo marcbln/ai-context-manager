@@ -341,3 +341,23 @@ This will show:
 - Why files were excluded
 - Token counts for each file
 - Total statistics
+
+## Generate Repomix Output
+
+When running `ai-context-manager generate repomix`, the command now displays detailed information about each context definition file:
+
+```
+Processing: dashboard.yaml
+  Description: Dashboard
+  Updated:     2025-12-14 by Marc Christenfeldt (Desktop)
+  Files:       15
+  Folders:     3
+
+Processing: organization-stats.yaml
+  Description: Organization stats
+  Updated:     2025-12-14 by Marc Christenfeldt (Desktop)
+  Files:       8
+  Folders:     1
+```
+
+The file and folder counts represent the number of include entries in each context definition that resolve to existing files and directories on the filesystem. This helps you understand the scope of each context before generation.
