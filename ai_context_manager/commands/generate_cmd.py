@@ -13,7 +13,6 @@ import yaml
 from rich.console import Console
 from rich.table import Table
 from rich.tree import Tree
-from rich.syntax import Syntax
 
 from ..config import CLI_CONTEXT_SETTINGS
 from ..utils.clipboard import copy_file_uri_to_clipboard
@@ -81,18 +80,6 @@ def _print_tree_view(include_details: List[tuple[Path, bool]], execution_root: P
     # Remove files that are in one of the root directories
     standalone_files = [f for f in files if not any(f.is_relative_to(d) for d in root_dirs)]
 
-    # Function to add file content to a node
-    def add_file_content(node, file_path):
-        try:
-            if file_path.stat().st_size > 20000: # 20kb limit
-                node.add("[yellow]File too large to display[/yellow]")
-                return
-            content = file_path.read_text(encoding="utf-8", errors="ignore")
-            syntax = Syntax(content, file_path.name, theme="dracula", line_numbers=True, word_wrap=True)
-            node.add(syntax)
-        except Exception as e:
-            node.add(f"[red]Error reading file: {e}[/red]")
-
     # Add directories to tree
     for d in root_dirs:
         try:
@@ -106,16 +93,14 @@ def _print_tree_view(include_details: List[tuple[Path, bool]], execution_root: P
 
             for f in all_files_in_dir:
                 relative_file_path = f.relative_to(d)
-                file_node = dir_node.add(f":page_facing_up: [green]{relative_file_path}[/green]")
-                add_file_content(file_node, f)
+                dir_node.add(f":page_facing_up: [green]{relative_file_path}[/green]")
         except Exception as e:
             tree.add(f"[red]Error processing directory {d}: {e}[/red]")
 
     # Add standalone files to tree
     for f in standalone_files:
         relative_file_path = f.relative_to(execution_root)
-        file_node = tree.add(f":page_facing_up: [green]{relative_file_path}[/green]")
-        add_file_content(file_node, f)
+        tree.add(f":page_facing_up: [green]{relative_file_path}[/green]")
 
     console.print(tree)
 
