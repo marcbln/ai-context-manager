@@ -4,12 +4,11 @@ A command-line tool for selecting files from your codebase and exporting them in
 
 ## Features
 
-- **Profile Management**: Define reusable sets of files and exclusion patterns for different projects.
-- **Session Context**: Interactively add, remove, and list files for a one-off export.
-- **Multiple Export Formats**: Supports Markdown, JSON, XML, and YAML.
-- **Token Counting**: Estimate token counts and check against AI model limits.
-- **Flexible Filtering**: Use glob patterns to include and exclude files.
-- **Dry Run Mode**: Preview what will be exported without creating a file.
+- **Interactive Selection TUI**: Visually pick folders/files and emit Repomix-ready YAML.
+- **Repomix Orchestration**: Run `repomix` with local selections or tag-filtered definition files.
+- **Native Exporter**: Convert a selection into Markdown/JSON/XML/YAML without Repomix.
+- **Tag Indexing**: Discover available tags across your definition files.
+- **Chat & RAG Mode**: Index selections into Qdrant and ask questions over them.
 
 ## Installation
 
@@ -20,189 +19,104 @@ uv pip install -e .
 uv pip install -e ".[ai]"
 ```
 
-## Workflows
+## Quick Start
 
-AI Context Manager supports two primary workflows:
+### 1. Select files visually
 
-1.  **Profile-based Workflow (Recommended)**: Create a named profile with your desired file paths and exclusion rules. Use this profile to generate context files consistently.
-2.  **Session-based Workflow**: Interactively add and remove files for a quick, one-time export without creating a permanent profile.
-
-### Interactive Selection & Generation
-
-Use the interactive TUI to visually select files and immediately generate a context file using Repomix.
-
-1. **Select Files**
-
-   ```bash
-   aicontext select start . -o my-selection.yaml
-   ```
-
-   Navigate with the arrow keys and toggle files/folders with `Enter`. The resulting YAML contains your `basePath`, `files`, and `folders` selections.
-
-2. **Generate Context via Repomix**
-
-**Basic Usage (Specific Files):**
 ```bash
-aicontext generate repomix my-selection.yaml --output context.xml
+aicontext select start . -o dashboard.yaml
 ```
 
-**Tag-Based Generation (Dynamic):**
-Point to a directory of definition files and filter by tags. Matching files are merged automatically.
+Navigate with the arrow keys, press `Enter` to toggle files/folders, then save. The YAML produced under `content.basePath` and `content.include` can be reused by every other command.
+
+### 2. Generate context via Repomix
+
 ```bash
-aicontext generate repomix --dir ./ai-context-definitions --tag stats --tag dashboard --copy
+aicontext generate repomix dashboard.yaml --output /tmp/dashboard.xml
 ```
 
-**Inspect Available Tags:**
-Unsure which tags exist in your definitions? List them with counts first.
+- Pass multiple YAML files to merge them.
+- Use `--copy` to place the file URI on the clipboard (requires `xclip` on Linux).
+- `--style` supports `xml` (default), `markdown`, or `plain`.
+
+### 3. Discover tags and run tag-filtered generation
+
 ```bash
 aicontext generate tags --dir ./ai-context-definitions
+aicontext generate repomix --dir ./ai-context-definitions --tag stats --tag dashboard
 ```
 
-**Merge Multiple Selections:**
-You can pass multiple selection files. They will be merged into a single context rooted at the first file's `basePath`.
+Definition files are scanned for `meta.tags`, and their `include` lists are merged automatically.
+
+### 4. Export natively (no Repomix)
+
 ```bash
-aicontext generate repomix context/dashboard.yaml context/stats.yaml --output combined.xml
+aicontext export export selection.yaml --output ctx.md --format markdown
 ```
 
-**Quick Usage (Auto-copy):**
-Generate to a temporary file and copy the file reference to your clipboard for immediate uploading.
+The native exporter understands the same YAML schema emitted by the TUI.
+
+### 5. Chat / RAG
 
 ```bash
-# Requires xclip on Linux
-aicontext generate repomix my-selection.yaml --copy
-```
-
-   The `generate` command reads the YAML and orchestrates Repomix to build the final context file.
-
-### Chat & RAG
-
-AI Context Manager can now index your selections into Qdrant and let you query them with OpenAI models. See [docs/rag.md](docs/rag.md) for setup and more examples.
-
-```bash
-# Index selected files
+# Requires `uv pip install -e ".[ai]"`
 aicontext chat index selection.yaml
-
-# Ask a question
 aicontext chat ask "Where is Selection.load defined?"
-
-# Show the documentation frontmatter schema
 aicontext chat schema
 ```
 
----
-
-### Profile-based Workflow (Quick Start)
-
-#### 1. Create a Profile
-A profile defines a reusable set of paths and rules.
-
-```bash
-# Create a profile named 'python-project' that includes the 'src' and 'tests' directories
-# and excludes any files in '__pycache__' directories.
-aicontext profile create python-project src/ tests/ --exclude "__pycache__/*"
-```
-
-#### 2. Export Using the Profile
-Use the profile's name to generate the context file.
-
-```bash
-# Export to markdown
-aicontext export output.md --profile python-project
-
-# Export to JSON with a file size limit and check against GPT-4o's token limit
-aicontext export context.json --profile python-project --format json --max-size 50000 --model gpt-4o
-```
+Refer to [docs/rag.md](docs/rag.md) for environment setup.
 
 ---
 
-### Session-based Workflow
+## Generate workflow details
 
-Use this for quick, one-off tasks where a permanent profile isn't needed.
-
-#### 1. Add Files to the Session
-Build your context by adding files and directories.
+### Repomix command reference
 
 ```bash
-# Add specific files
-aicontext add files src/main.py src/utils.py
-
-# Add a directory recursively
-aicontext add files docs/ --recursive
+aicontext generate repomix <selection.yaml>... [OPTIONS]
 ```
 
-#### 2. List and Remove Files (Optional)
-Check your current session and remove any unwanted files.
+Key options:
+
+- `--dir / --tag`: Discover selection files by scanning a directory for tags.
+- `--output/-o`: Target file (defaults to `/tmp/acm__*.xml`|`md` depending on `--style`).
+- `--style`: `xml` (default), `markdown`, or `plain`.
+- `--copy/-c`: Copy the resulting file URI to the clipboard (Linux/xclip only).
+- `--verbose/-v`: Echo every include path and the underlying Repomix command.
+
+### Tag discovery
 
 ```bash
-# List files currently in the session
-aicontext list files
-
-# Remove a file
-aicontext remove files src/utils.py
+aicontext generate tags --dir ./ai-context-definitions [-v]
 ```
 
-#### 3. Export the Session
-Run the `export` command without the `--profile` flag.
+Prints a table of tags with file counts so you can craft meaningful `--tag` filters before invoking Repomix.
+
+### Native exporter
 
 ```bash
-# Export the current session directly to a file
-aicontext export session_output.md
+aicontext export export selection.yaml --output context.md --format markdown
 ```
+
+Use this path when Repomix is unavailable or when you need a quick Markdown/JSON/XML/YAML export powered entirely by Python.
 
 ---
 
-### Debugging Workflow with `aicontext debug`
+## Chat workflow
 
-Quickly build a debugging context from a stack trace by parsing file paths, resolving them in your local project, and optionally exporting a ready-to-share context file.
-
-Example:
-
-```bash
-cat crash.log | aicontext debug from-trace --base-path /path/to/project -o debug_context.md
-```
-
-What it does:
-
-- Finds paths like `/path/to/file.py:123`, `in /srv/app/file.php line 89`, `at C:\\\project\\src\\main.ts:42`.
-- Resolves them relative to `--base-path` and adds them to the session context.
-- Optionally writes a markdown file that includes the original error trace at the top and the exported file contents below.
-
-Options:
-
-- `--base-path, -b` (required): local project root used to resolve paths.
-- `--output, -o` (optional): write a combined debug context file.
-- `--format, -f` (optional): export format (markdown, json, xml, yaml). The original trace is prepended when using markdown.
+1. `aicontext chat index selection.yaml` – chunk files from the selection into Qdrant.
+2. `aicontext chat ask "question"` – query the indexed data. Omit the question to enter interactive mode.
+3. `aicontext chat schema` – view the documentation frontmatter schema used when enriching selection metadata.
 
 ---
 
-## Full Command Reference
+## Command reference
 
-### Session Management
-The "session" is a temporary list of files stored in `context.yaml`.
+- `aicontext select start`: Interactive TUI for creating selection YAML files.
+- `aicontext generate repomix`: Run Repomix using one or more selection YAML definitions.
+- `aicontext generate tags`: Inspect tags inside a directory of context definitions.
+- `aicontext export export`: Native exporter that reads a selection YAML and produces Markdown/JSON/XML/YAML.
+- `aicontext chat <index|ask|schema>`: Qdrant-backed RAG helpers (requires `.[ai]` extras).
 
-- `aicontext add files <path>... [-r]`: Add files/directories to the current session. Use `-r` for recursive.
-- `aicontext remove files <path>... [--all]`: Remove files from the session. Use `--all` to clear.
-- `aicontext list files [-v]`: List files in the session. Use `-v` for verbose output.
-- `aicontext import directory <path>`: Import a directory structure into the session, preserving relative paths.
-
-### Profile Management
-Profiles are reusable configurations stored in `~/.config/ai-context-manager/profiles/`.
-
-- `aicontext profile create <name> <path>...`: Create a new profile from paths and patterns.
-- `aicontext profile list`: List all saved profiles.
-- `aicontext profile show <name>`: Show details of a specific profile.
-- `aicontext profile update <name>`: Save the current session to a profile (creates if not exists).
-- `aicontext profile delete <name>`: Delete a profile.
-
-### Exporting
-- `aicontext export <output> [--profile <name>]`: Export files to a formatted context file. If `--profile` is omitted, the current session is used.
-  - `--format <fmt>`: Set format (markdown, json, xml, yaml).
-  - `--model <name>`: Check token count against a specific model.
-  - `--dry-run`: Preview the output without writing a file.
-
-### Debugging
-- `aicontext debug from-trace --base-path <path> [-o <output>] [--format <fmt>]`
-  - Reads a stack trace from stdin, resolves referenced files within `<path>`, updates the session, and optionally writes a combined debug context.
-  - `--base-path, -b` (required): project root for resolution.
-  - `--output, -o` (optional): write combined output (recommended: markdown).
-  - `--format, -f` (optional): export format (markdown, json, xml, yaml). Original trace is prepended only for markdown.
+Legacy session/profile commands have been removed; follow the workflow above to manage selections via YAML files instead.

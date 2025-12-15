@@ -79,7 +79,7 @@ Create directory `ai_context_manager/schemas/` if it doesn't exist.
   "title": "AI Documentation Frontmatter",
   "description": "Standard metadata for AI-generated documentation files.",
   "type": "object",
-  "required": ["status", "last_edit_date"],
+  "required": ["status", "updatedAt"],
   "properties": {
     "title": {
       "type": "string",
@@ -90,7 +90,7 @@ Create directory `ai_context_manager/schemas/` if it doesn't exist.
       "enum": ["draft", "review", "stable", "deprecated"],
       "description": "The current lifecycle state of this document."
     },
-    "last_edit_date": {
+    "updatedAt": {
       "type": "string",
       "format": "date",
       "description": "YYYY-MM-DD format."
