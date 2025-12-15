@@ -12,6 +12,7 @@ import typer
 import yaml
 from rich.console import Console
 from rich.table import Table
+from rich.tree import Tree
 
 from ..config import CLI_CONTEXT_SETTINGS
 from ..utils.clipboard import copy_file_uri_to_clipboard
@@ -61,6 +62,47 @@ def _format_path(path: Path, is_dir: bool, highlight: str) -> str:
     """
     suffix = "/" if is_dir else ""
     return f"[{highlight}]{path}{suffix}[/{highlight}]"
+
+
+def _print_tree_view(include_details: List[tuple[Path, bool]], execution_root: Path) -> None:
+    """Prints a tree view of the included files and directories."""
+    tree = Tree(
+        f"Included Content",
+        guide_style="bold bright_blue",
+    )
+
+    dirs = sorted([p for p, is_dir in include_details if is_dir])
+    files = sorted([p for p, is_dir in include_details if not is_dir])
+
+    # Remove subdirectories from the list
+    root_dirs = [d for d in dirs if not any(d != other_d and d.is_relative_to(other_d) for other_d in dirs)]
+
+    # Remove files that are in one of the root directories
+    standalone_files = [f for f in files if not any(f.is_relative_to(d) for d in root_dirs)]
+
+    # Add directories to tree
+    for d in root_dirs:
+        try:
+            relative_dir_path = d.relative_to(execution_root)
+            dir_node = tree.add(f":open_file_folder: [cyan]{relative_dir_path}/[/cyan]")
+
+            all_files_in_dir = sorted([f for f in d.rglob("*") if f.is_file()])
+
+            if not all_files_in_dir:
+                dir_node.add("[dim]No files found.[/dim]")
+
+            for f in all_files_in_dir:
+                relative_file_path = f.relative_to(d)
+                dir_node.add(f":page_facing_up: [green]{relative_file_path}[/green]")
+        except Exception as e:
+            tree.add(f"[red]Error processing directory {d}: {e}[/red]")
+
+    # Add standalone files to tree
+    for f in standalone_files:
+        relative_file_path = f.relative_to(execution_root)
+        tree.add(f":page_facing_up: [green]{relative_file_path}[/green]")
+
+    console.print(tree)
 
 
 def _print_metadata(
@@ -342,7 +384,11 @@ def generate_repomix(
         raise typer.Exit(1)
 
     first_data = _load_selection(final_selection_files[0])
-    execution_root = Path(_ensure_content(first_data, "basePath", final_selection_files[0])).resolve()
+    raw_base = _ensure_content(first_data, "basePath", final_selection_files[0])
+    if Path(raw_base).is_absolute():
+        execution_root = Path(raw_base).resolve()
+    else:
+        execution_root = (final_selection_files[0].parent / raw_base).resolve()
 
     if verbose:
         console.print(f"[dim]Using Base Path: {execution_root}[/dim]")
@@ -424,10 +470,7 @@ def generate_repomix(
             final_patterns.append(pattern)
 
         if verbose and include_details:
-            console.print("  Includes:")
-            for full_path, is_dir in include_details:
-                path_style = "cyan" if is_dir else "green"
-                console.print(f"    • {_format_path(full_path, is_dir, path_style)}")
+            _print_tree_view(include_details, execution_root)
 
     unique_patterns = list(dict.fromkeys(final_patterns))
 
