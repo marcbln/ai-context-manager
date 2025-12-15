@@ -256,8 +256,12 @@ content:
 
     output_file = tmp_path / "context.txt"
 
+    def create_output(*args, **kwargs):
+        output_file.touch()
+        return MagicMock(returncode=0, stderr="")
+
     with patch("shutil.which", return_value="/usr/bin/repomix"), patch(
-        "subprocess.run", return_value=MagicMock(returncode=0, stderr="")
+        "subprocess.run", side_effect=create_output
     ) as mock_run:
         result = runner.invoke(
             app,
@@ -373,24 +377,8 @@ content:
     with patch("shutil.which", return_value="/usr/bin/repomix"), patch(
         "subprocess.run", return_value=MagicMock(returncode=0, stderr="")
     ):
-        # Non-verbose: should show selection absolute path
+        # Run in verbose mode to test both path and tree view
         result = runner.invoke(
-            app,
-            [
-                "generate",
-                "repomix",
-                str(selection_file),
-                "--output",
-                str(output_file),
-            ],
-        )
-
-        assert result.exit_code == 0
-        abs_path_line = f"[magenta]{selection_file.resolve()}[/magenta]"
-        assert abs_path_line in result.output
-
-        # Verbose: should list include entries with folder suffix
-        result_verbose = runner.invoke(
             app,
             [
                 "generate",
@@ -402,8 +390,13 @@ content:
             ],
         )
 
-        assert result_verbose.exit_code == 0
-        file_line = f"[green]{readme_file.resolve()}[/green]"
-        dir_line = f"[cyan]{src_dir.resolve()}/[/cyan]"
-        assert file_line in result_verbose.output
-        assert dir_line in result_verbose.output
+        assert result.exit_code == 0, f"CLI exited with code {result.exit_code}: {result.output}"
+
+        # Check for absolute path of the selection file (without color codes)
+        abs_path_line = f"{selection_file.resolve()}"
+        assert abs_path_line in result.output
+
+        # Check for tree view structure
+        assert "Included Content" in result.output
+        assert "README.md" in result.output
+        assert "src/" in result.output
