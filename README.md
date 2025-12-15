@@ -52,6 +52,12 @@ Point to a directory of definition files and filter by tags. Matching files are 
 aicontext generate repomix --dir ./ai-context-definitions --tag stats --tag dashboard --copy
 ```
 
+**Inspect Available Tags:**
+Unsure which tags exist in your definitions? List them with counts first.
+```bash
+aicontext generate tags --dir ./ai-context-definitions
+```
+
 **Merge Multiple Selections:**
 You can pass multiple selection files. They will be merged into a single context rooted at the first file's `basePath`.
 ```bash

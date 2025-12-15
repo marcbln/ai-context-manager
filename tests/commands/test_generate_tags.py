@@ -149,3 +149,52 @@ def test_generate_tags_default_output_uses_tags(tmp_path: Path) -> None:
     cmd = mock_run.call_args[0][0]
     output_idx = cmd.index("--output") + 1
     assert cmd[output_idx] == str(expected_output)
+
+
+def test_list_tags_command(tmp_path: Path) -> None:
+    defs_dir = tmp_path / "defs"
+    defs_dir.mkdir()
+    base_path = tmp_path / "src"
+
+    create_mock_yaml(defs_dir, base_path, "api.yaml", ["api", "backend"], ["api.py"])
+    create_mock_yaml(defs_dir, base_path, "ui.yaml", ["frontend", "ui"], ["ui.vue"])
+    create_mock_yaml(defs_dir, base_path, "core.yaml", ["api", "core"], ["core.py"])
+    create_mock_yaml(defs_dir, base_path, "untagged.yaml", [], ["misc.py"])
+
+    result = runner.invoke(app, ["generate", "tags", "--dir", str(defs_dir)])
+
+    assert result.exit_code == 0
+    assert "Available Tags" in result.output
+    assert "api" in result.output
+    assert "frontend" in result.output
+    assert "2" in result.output  # api tag appears twice
+    assert "(1 files had no tags)" in result.output
+
+
+def test_find_files_verbosity(tmp_path: Path) -> None:
+    defs_dir = tmp_path / "defs"
+    defs_dir.mkdir()
+    base_path = tmp_path / "src"
+    base_path.mkdir()
+
+    create_mock_yaml(defs_dir, base_path, "api.yaml", ["api"], ["api.py"])
+    create_mock_yaml(defs_dir, base_path, "ui.yaml", ["frontend"], ["ui.vue"])
+
+    with patch("shutil.which", return_value="/usr/bin/repomix"), patch("subprocess.run"):
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "repomix",
+                "--dir",
+                str(defs_dir),
+                "--tag",
+                "api",
+                "-v",
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert "Scanning 2 files" in result.output
+    assert "api.yaml: Match" in result.output
+    assert "ui.yaml: No match" in result.output

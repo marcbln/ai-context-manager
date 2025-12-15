@@ -4,12 +4,14 @@
 import shutil
 import subprocess
 import tempfile
+from collections import Counter
 from pathlib import Path
 from typing import Any, List, Optional, Set
 
 import typer
 import yaml
 from rich.console import Console
+from rich.table import Table
 
 from ..config import CLI_CONTEXT_SETTINGS
 from ..utils.clipboard import copy_file_uri_to_clipboard
@@ -134,24 +136,101 @@ def _find_files_by_tags(directory: Path, tags: List[str], verbose: bool = False)
     for file_path in candidates:
         try:
             data = _load_selection(file_path)
-        except Exception:
+        except Exception as exc:
             if verbose:
-                console.print(f"[yellow]  Skipping {file_path.name} (Parsing error)[/yellow]")
+                console.print(
+                    f"[yellow]  ⚠ Skipping {file_path.name}: Parsing error ({exc})[/yellow]"
+                )
             continue
 
         file_meta = data.get("meta", {})
-        file_tags = set(file_meta.get("tags", []))
+        raw_tags = file_meta.get("tags", [])
+        if not isinstance(raw_tags, list):
+            raw_tags = []
+        file_tags = set(raw_tags)
+
+        if verbose:
+            tag_str = ", ".join(sorted(file_tags)) if file_tags else "<none>"
+            if required_tags.isdisjoint(file_tags):
+                console.print(
+                    f"[dim]  • {file_path.name}: [yellow]No match[/yellow] (Found: {tag_str})[/dim]"
+                )
+            else:
+                console.print(
+                    f"[dim]  • {file_path.name}: [green]Match[/green] (Found: {tag_str})[/dim]"
+                )
 
         if required_tags.isdisjoint(file_tags):
             continue
 
         matches.append(file_path)
-        if verbose:
-            console.print(
-                f"[dim]  [green]Match:[/green] {file_path.name} (Tags: {', '.join(file_tags)})[/dim]"
-            )
 
     return sorted(matches)
+
+
+@app.command("tags")
+def list_available_tags(
+    context_dir: Path = typer.Option(
+        ..., "--dir", "-d", help="Directory to scan for context definitions", exists=True, file_okay=False
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show processing details"),
+):
+    """
+    List all unique tags found in context definition files within a directory.
+    """
+    candidates = list(context_dir.glob("*.yaml")) + list(context_dir.glob("*.yml"))
+
+    if not candidates:
+        console.print(f"[yellow]No YAML files found in {context_dir}[/yellow]")
+        raise typer.Exit(0)
+
+    tag_counts = Counter()
+    files_without_tags = 0
+
+    if verbose:
+        console.print(f"[dim]Scanning {len(candidates)} files...[/dim]")
+
+    for file_path in candidates:
+        try:
+            data = _load_selection(file_path)
+        except Exception as exc:
+            if verbose:
+                console.print(
+                    f"[yellow]  ⚠ Skipping {file_path.name}: Parsing error ({exc})[/yellow]"
+                )
+            continue
+
+        meta = data.get("meta", {})
+        tags = meta.get("tags", [])
+
+        if isinstance(tags, list) and tags:
+            tag_counts.update(tags)
+            if verbose:
+                console.print(
+                    f"[dim]  • {file_path.name}: Tags -> {', '.join(sorted(tags))}[/dim]"
+                )
+        else:
+            files_without_tags += 1
+            if verbose:
+                console.print(f"[dim]  • {file_path.name}: [yellow]No tags[/yellow][/dim]")
+
+    if not tag_counts:
+        console.print(f"[yellow]No tags found in {len(candidates)} files.[/yellow]")
+        if files_without_tags:
+            console.print(f"[dim]({files_without_tags} files had no tags)[/dim]")
+        return
+
+    table = Table(title=f"Available Tags in {context_dir.name}")
+    table.add_column("Tag", style="cyan")
+    table.add_column("Count", style="green", justify="right")
+
+    for tag, count in tag_counts.most_common():
+        table.add_row(tag, str(count))
+
+    console.print(table)
+
+    if files_without_tags > 0:
+        console.print(f"[dim]({files_without_tags} files had no tags)[/dim]")
 
 
 @app.command("repomix")
