@@ -426,8 +426,8 @@ def generate_repomix(
         if verbose and include_details:
             console.print("  Includes:")
             for full_path, is_dir in include_details:
-                style = "cyan" if is_dir else "green"
-                console.print(f"    • {_format_path(full_path, is_dir, style)}")
+                path_style = "cyan" if is_dir else "green"
+                console.print(f"    • {_format_path(full_path, is_dir, path_style)}")
 
     unique_patterns = list(dict.fromkeys(final_patterns))
 
