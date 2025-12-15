@@ -66,6 +66,14 @@ def _print_metadata(meta: dict, filename: str, file_count: int = 0, folder_count
     if description:
         console.print(f"  Description: [green]{description}[/green]")
 
+    tags = meta.get("tags", [])
+    if tags:
+        console.print(f"  Tags:        {', '.join(tags)}")
+
+    related = meta.get("relatedTags", [])
+    if related:
+        console.print(f"  See Also:    [italic cyan]{', '.join(related)}[/italic cyan]")
+
     if "updatedAt" in meta:
         by = f" by {meta['updatedBy']}" if meta.get("updatedBy") else ""
         console.print(f"  Updated:     {meta['updatedAt']}{by}")

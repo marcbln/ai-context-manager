@@ -21,6 +21,7 @@ class SelectionMeta:
     updatedBy: str
     documentType: str
     tags: List[str] = field(default_factory=list)
+    relatedTags: List[str] = field(default_factory=list)
     version: Optional[str] = None
 
 
@@ -66,6 +67,7 @@ class Selection:
             updatedBy=meta_dict["updatedBy"],
             documentType=meta_dict["documentType"],
             tags=meta_dict.get("tags", []),
+            relatedTags=meta_dict.get("relatedTags", []),
             version=meta_dict.get("version"),
         )
 

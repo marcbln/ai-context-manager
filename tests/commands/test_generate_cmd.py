@@ -232,6 +232,48 @@ def test_generate_multidoc_prints_metadata(tmp_path: Path) -> None:
     assert "Created:     2025-12-10 by tester" in output_text
 
 
+def test_generate_prints_related_tags(tmp_path: Path) -> None:
+    """Ensure relatedTags are parsed and printed."""
+
+    selection_file = tmp_path / "related.yaml"
+    selection_content = """---
+meta:
+  description: "Main Dashboard"
+  createdAt: "2025-12-15"
+  createdBy: "Tester"
+  updatedAt: "2025-12-15"
+  updatedBy: "Tester"
+  documentType: "CONTEXT_DEFINITION"
+  tags: ["dashboard"]
+  relatedTags: ["dashboard-cards", "api-docs"]
+content:
+  basePath: "."
+  include:
+    - "README.md"
+"""
+    selection_file.write_text(selection_content, encoding="utf-8")
+    (tmp_path / "README.md").write_text("content", encoding="utf-8")
+
+    output_file = tmp_path / "context.txt"
+
+    with patch("shutil.which", return_value="/usr/bin/repomix"), patch(
+        "subprocess.run", return_value=MagicMock(returncode=0, stderr="")
+    ) as mock_run:
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "repomix",
+                str(selection_file),
+                "--output",
+                str(output_file),
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert "See Also:    dashboard-cards, api-docs" in result.output
+
+
 def test_count_files_and_folders():
     """Test the file/folder counting logic."""
     from ai_context_manager.commands.generate_cmd import _count_files_and_folders

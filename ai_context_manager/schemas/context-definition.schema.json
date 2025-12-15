@@ -49,6 +49,15 @@
                     },
                     "uniqueItems": true
                 },
+                "relatedTags": {
+                    "type": "array",
+                    "description": "Suggested tags relevant to this context",
+                    "items": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "uniqueItems": true
+                },
                 "documentType": {
                     "type": "string",
                     "enum": ["CONTEXT_DEFINITION"]
