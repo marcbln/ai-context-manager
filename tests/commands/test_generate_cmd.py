@@ -344,3 +344,66 @@ content:
         assert "Folders:" in output_text
         assert "1" in output_text  # Should show 1 file
         assert "1" in output_text  # Should show 1 folder
+
+
+def test_generate_repomix_prints_absolute_paths(tmp_path: Path) -> None:
+    """Ensure absolute paths and verbose include listings are shown."""
+
+    selection_file = tmp_path / "abs.yaml"
+    selection_content = """---
+meta:
+  description: "Absolute path selection"
+---
+content:
+  basePath: "."
+  include:
+    - "README.md"
+    - "src"
+"""
+    selection_file.write_text(selection_content)
+
+    readme_file = tmp_path / "README.md"
+    readme_file.write_text("# Test")
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+
+    output_file = tmp_path / "context.xml"
+    output_file.touch()
+
+    with patch("shutil.which", return_value="/usr/bin/repomix"), patch(
+        "subprocess.run", return_value=MagicMock(returncode=0, stderr="")
+    ):
+        # Non-verbose: should show selection absolute path
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "repomix",
+                str(selection_file),
+                "--output",
+                str(output_file),
+            ],
+        )
+
+        assert result.exit_code == 0
+        abs_path_line = f"[magenta]{selection_file.resolve()}[/magenta]"
+        assert abs_path_line in result.output
+
+        # Verbose: should list include entries with folder suffix
+        result_verbose = runner.invoke(
+            app,
+            [
+                "generate",
+                "repomix",
+                str(selection_file),
+                "--output",
+                str(output_file),
+                "--verbose",
+            ],
+        )
+
+        assert result_verbose.exit_code == 0
+        file_line = f"[green]{readme_file.resolve()}[/green]"
+        dir_line = f"[cyan]{src_dir.resolve()}/[/cyan]"
+        assert file_line in result_verbose.output
+        assert dir_line in result_verbose.output

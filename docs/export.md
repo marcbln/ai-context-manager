@@ -344,16 +344,18 @@ This will show:
 
 ## Generate Repomix Output
 
-When running `ai-context-manager generate repomix`, the command now displays detailed information about each context definition file:
+When running `ai-context-manager generate repomix`, the command now displays detailed information about each context definition file, including the resolved absolute path:
 
 ```
 Processing: dashboard.yaml
+  File Path: /home/marc/context-defs/dashboard.yaml
   Description: Dashboard
   Updated:     2025-12-14 by Marc Christenfeldt (Desktop)
   Files:       15
   Folders:     3
 
 Processing: organization-stats.yaml
+  File Path: /home/marc/context-defs/organization-stats.yaml
   Description: Organization stats
   Updated:     2025-12-14 by Marc Christenfeldt (Desktop)
   Files:       8
@@ -361,3 +363,21 @@ Processing: organization-stats.yaml
 ```
 
 The file and folder counts represent the number of include entries in each context definition that resolve to existing files and directories on the filesystem. This helps you understand the scope of each context before generation.
+
+### Verbose Mode Output
+
+Passing `--verbose` adds an `Includes` block that lists every resolved path repomix will ingest. Files are printed in green, folders in cyan with a trailing `/` for clarity:
+
+```
+Processing: dashboard.yaml
+  File Path: /abs/path/dashboard.yaml
+  Description: Dashboard
+  Files:       2
+  Folders:     1
+  Includes:
+    • /abs/path/datasets/
+    • /abs/path/datasets/schema.sql
+    • /abs/path/README.md
+```
+
+Use verbose output while debugging selections to confirm that paths resolve as expected.

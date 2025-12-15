@@ -55,12 +55,27 @@ def _count_files_and_folders(include_items: List[str], base_path: Path) -> tuple
     return file_count, folder_count
 
 
-def _print_metadata(meta: dict, filename: str, file_count: int = 0, folder_count: int = 0) -> None:
+def _format_path(path: Path, is_dir: bool, highlight: str) -> str:
+    """
+    Return a Rich-formatted string for an absolute path with optional directory suffix.
+    """
+    suffix = "/" if is_dir else ""
+    return f"[{highlight}]{path}{suffix}[/{highlight}]"
+
+
+def _print_metadata(
+    meta: dict,
+    filename: str,
+    file_count: int = 0,
+    folder_count: int = 0,
+    absolute_path: Optional[Path] = None,
+) -> None:
     """Print extracted metadata to the console."""
-    if not meta:
-        return
+    meta = meta or {}
 
     console.print(f"[bold blue]Processing: {filename}[/bold blue]")
+    if absolute_path:
+        console.print(f"  File Path: {_format_path(absolute_path, absolute_path.is_dir(), 'magenta')}")
 
     description = meta.get("description")
     if description:
@@ -292,6 +307,12 @@ def generate_repomix(
     """
     Execute repomix using selection files, or discover them via directory + tags.
     """
+    # Validate style parameter
+    valid_styles = {"xml", "markdown", "plain"}
+    if style not in valid_styles:
+        console.print(f"[red]Error: Invalid style '{style}'. Valid options are: {', '.join(sorted(valid_styles))}[/red]")
+        raise typer.Exit(1)
+
     final_selection_files: List[Path] = []
 
     if selection_files:
@@ -354,6 +375,7 @@ def generate_repomix(
     final_patterns: List[str] = []
 
     for sel_file in final_selection_files:
+        sel_absolute_path = sel_file.resolve()
         data = _load_selection(sel_file)
 
         if data.get("meta"):
@@ -367,9 +389,15 @@ def generate_repomix(
                 current_base = (sel_file.parent / raw_base).resolve()
             
             file_count, folder_count = _count_files_and_folders(include_items, current_base)
-            _print_metadata(data["meta"], sel_file.name, file_count, folder_count)
+            _print_metadata(
+                data["meta"],
+                sel_file.name,
+                file_count,
+                folder_count,
+                sel_absolute_path,
+            )
         else:
-            _print_metadata({}, sel_file.name)
+            _print_metadata({}, sel_file.name, absolute_path=sel_absolute_path)
 
         raw_base = _ensure_content(data, "basePath", sel_file)
         include_items = _ensure_content(data, "include", sel_file)
@@ -382,10 +410,13 @@ def generate_repomix(
         if verbose:
             console.print(f"[dim]Processing {sel_file} ({len(include_items)} entries)[/dim]")
 
+        include_details: List[tuple[Path, bool]] = []
+
         for item in include_items:
             path_obj = Path(item)
             full_path = path_obj if path_obj.is_absolute() else (current_base / path_obj).resolve()
             is_dir = full_path.exists() and full_path.is_dir()
+            include_details.append((full_path, is_dir))
 
             try:
                 rel_path = full_path.relative_to(execution_root)
@@ -397,6 +428,12 @@ def generate_repomix(
                 pattern = f"{pattern}/**"
 
             final_patterns.append(pattern)
+
+        if verbose and include_details:
+            console.print("  Includes:")
+            for full_path, is_dir in include_details:
+                style = "cyan" if is_dir else "green"
+                console.print(f"    • {_format_path(full_path, is_dir, style)}")
 
     unique_patterns = list(dict.fromkeys(final_patterns))
 
