@@ -46,7 +46,10 @@ def test_generate_repomix_success(tmp_path: Path) -> None:
         )
 
     assert result.exit_code == 0
-    assert "Success! Context generated" in result.output
+    # Strip ANSI codes for comparison
+    import re
+    clean_output = re.sub(r'\x1b\[[0-9;]*m', '', result.output)
+    assert "Success! Context generated" in clean_output
 
     args, kwargs = mock_run.call_args
     cmd = args[0]
@@ -65,7 +68,10 @@ def test_generate_missing_binary(tmp_path: Path) -> None:
         result = runner.invoke(app, ["generate", "repomix", str(selection_file)])
 
     assert result.exit_code == 1
-    assert "Error: 'repomix' not found" in result.output
+    # Strip ANSI codes for comparison
+    import re
+    clean_output = re.sub(r'\x1b\[[0-9;]*m', '', result.output)
+    assert "Error: 'repomix' not found" in clean_output
 
 
 def test_generate_repomix_default_output_and_copy(tmp_path: Path) -> None:
@@ -104,8 +110,11 @@ def test_generate_repomix_default_output_and_copy(tmp_path: Path) -> None:
             )
 
     assert result.exit_code == 0
-    assert "Success!" in result.output
-    assert "File URI copied to clipboard" in result.output
+    # Strip ANSI codes for comparison
+    import re
+    clean_output = re.sub(r'\x1b\[[0-9;]*m', '', result.output)
+    assert "Success!" in clean_output
+    assert "File URI copied to clipboard" in clean_output
 
     # Verify calls
     # 1. Repomix call
@@ -169,7 +178,10 @@ def test_generate_multiple_selection_files(tmp_path: Path) -> None:
         )
 
     assert result.exit_code == 0
-    assert "Success! Context generated" in result.output
+    # Strip ANSI codes for comparison
+    import re
+    clean_output = re.sub(r'\x1b\[[0-9;]*m', '', result.output)
+    assert "Success! Context generated" in clean_output
 
     args, kwargs = mock_run.call_args
     cmd = args[0]
@@ -227,9 +239,12 @@ def test_generate_multidoc_prints_metadata(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     output_text = result.output
-    assert "Processing: selection.yaml" in output_text
-    assert "Description: Docs context" in output_text
-    assert "Created:     2025-12-10 by tester" in output_text
+    # Strip ANSI codes for comparison
+    import re
+    clean_output = re.sub(r'\x1b\[[0-9;]*m', '', output_text)
+    assert "Processing: selection.yaml" in clean_output
+    assert "Description: Docs context" in clean_output
+    assert "Created:     2025-12-10 by tester" in clean_output
 
 
 def test_generate_prints_related_tags(tmp_path: Path) -> None:
@@ -275,7 +290,10 @@ content:
         )
 
     assert result.exit_code == 0
-    assert "See Also:    dashboard-cards, api-docs" in result.output
+    # Strip ANSI codes for comparison
+    import re
+    clean_output = re.sub(r'\x1b\[[0-9;]*m', '', result.output)
+    assert "See Also:    dashboard-cards, api-docs" in clean_output
 
 
 def test_count_files_and_folders():
@@ -294,14 +312,64 @@ def test_count_files_and_folders():
         test_dir.mkdir()
         
         # Test counting
-        file_count, folder_count = _count_files_and_folders(["test.txt", "subdir"], base)
+        file_count, folder_count, missing_files = _count_files_and_folders(["test.txt", "subdir"], base)
         assert file_count == 1
         assert folder_count == 1
+        assert missing_files == []
         
-        # Test non-existent paths (should be ignored)
-        file_count, folder_count = _count_files_and_folders(["nonexistent.txt"], base)
+        # Test non-existent paths (should be tracked as missing)
+        file_count, folder_count, missing_files = _count_files_and_folders(["nonexistent.txt"], base)
         assert file_count == 0
         assert folder_count == 0
+        assert missing_files == ["nonexistent.txt"]
+
+
+def test_generate_repomix_warns_missing_files(tmp_path: Path) -> None:
+    """Test that generate repomix shows warnings for missing files."""
+    from ai_context_manager.cli import app
+    from typer.testing import CliRunner
+    
+    # Create test selection file with missing files
+    selection_file = tmp_path / "test_missing.yaml"
+    selection_content = """---
+meta:
+  description: "Test selection with missing files"
+  updatedAt: "2025-12-15"
+  updatedBy: "Test User"
+---
+content:
+  basePath: "."
+  include:
+    - "README.md"  # This exists
+    - "missing.txt"  # This doesn't exist
+    - "nonexistent.py"  # This doesn't exist
+"""
+    selection_file.write_text(selection_content)
+    
+    # Create only the existing file
+    (tmp_path / "README.md").write_text("# Test")
+    
+    # Create expected output file
+    output_file = tmp_path / "context.xml"
+    output_file.touch()
+    
+    with patch("shutil.which", return_value="/usr/bin/repomix"), \
+         patch("subprocess.run") as mock_run:
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stderr = ""
+        
+        runner = CliRunner()
+        result = runner.invoke(app, ["generate", "repomix", str(selection_file), "--output", str(output_file)])
+        
+        assert result.exit_code == 0
+        output_text = result.output
+        # Strip ANSI codes for comparison
+        import re
+        clean_output = re.sub(r'\x1b\[[0-9;]*m', '', output_text)
+        assert "Warning: 2 file(s) from selection not found:" in clean_output
+        assert "• missing.txt" in clean_output
+        assert "• nonexistent.py" in clean_output
+        assert "Files:       1" in clean_output  # Only the existing file is counted
 
 
 def test_generate_repomix_shows_counts(capsys, tmp_path):
@@ -344,10 +412,13 @@ content:
         
         assert result.exit_code == 0
         output_text = result.output
-        assert "Files:" in output_text
-        assert "Folders:" in output_text
-        assert "1" in output_text  # Should show 1 file
-        assert "1" in output_text  # Should show 1 folder
+        # Strip ANSI codes for comparison
+        import re
+        clean_output = re.sub(r'\x1b\[[0-9;]*m', '', output_text)
+        assert "Files:" in clean_output
+        assert "Folders:" in clean_output
+        assert "1" in clean_output  # Should show 1 file
+        assert "1" in clean_output  # Should show 1 folder
 
 
 def test_generate_repomix_prints_absolute_paths(tmp_path: Path) -> None:
@@ -393,10 +464,12 @@ content:
         assert result.exit_code == 0, f"CLI exited with code {result.exit_code}: {result.output}"
 
         # Check for absolute path of the selection file (without color codes)
+        import re
+        clean_output = re.sub(r'\x1b\[[0-9;]*m', '', result.output)
         abs_path_line = f"{selection_file.resolve()}"
-        assert abs_path_line in result.output
+        assert abs_path_line in clean_output
 
         # Check for tree view structure
-        assert "Included Content" in result.output
-        assert "README.md" in result.output
-        assert "src/" in result.output
+        assert "Included Content" in clean_output
+        assert "README.md" in clean_output
+        assert "src/" in clean_output

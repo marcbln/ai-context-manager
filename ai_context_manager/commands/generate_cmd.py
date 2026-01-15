@@ -33,19 +33,21 @@ _METADATA_HINT_KEYS = {
 }
 
 
-def _count_files_and_folders(include_items: List[str], base_path: Path) -> tuple[int, int]:
+def _count_files_and_folders(include_items: List[str], base_path: Path) -> tuple[int, int, List[str]]:
     """
     Count files and folders in a selection's include list.
-    Returns: (file_count, folder_count)
+    Returns: (file_count, folder_count, missing_files)
     """
     file_count = 0
     folder_count = 0
+    missing_files = []
     
     for item in include_items:
         path_obj = Path(item)
         full_path = path_obj if path_obj.is_absolute() else (base_path / path_obj).resolve()
         
         if not full_path.exists():
+            missing_files.append(item)
             continue
             
         if full_path.is_file():
@@ -53,7 +55,7 @@ def _count_files_and_folders(include_items: List[str], base_path: Path) -> tuple
         elif full_path.is_dir():
             folder_count += 1
     
-    return file_count, folder_count
+    return file_count, folder_count, missing_files
 
 
 def _format_path(path: Path, is_dir: bool, highlight: str) -> str:
@@ -428,7 +430,15 @@ def generate_repomix(
             else:
                 current_base = (sel_file.parent / raw_base).resolve()
             
-            file_count, folder_count = _count_files_and_folders(include_items, current_base)
+            file_count, folder_count, missing_files = _count_files_and_folders(include_items, current_base)
+            
+            # Show warnings for missing files
+            if missing_files:
+                console.print(f"[red]Warning: {len(missing_files)} file(s) from selection not found:[/red]")
+                for missing_file in missing_files:
+                    console.print(f"  [red]• {missing_file}[/red]")
+                console.print()  # Add spacing
+            
             _print_metadata(
                 data["meta"],
                 sel_file.name,
