@@ -13,7 +13,7 @@ runner = CliRunner()
 
 
 def test_generate_repomix_success(tmp_path: Path) -> None:
-    """Repomix command runs when selection and binary exist."""
+    """Native generation command runs when selection exists."""
 
     selection_file = tmp_path / "selection.yaml"
     data = {
@@ -25,53 +25,79 @@ def test_generate_repomix_success(tmp_path: Path) -> None:
 
     # Create dummy files/dirs so validation logic passes
     (tmp_path / "src").mkdir()
-    (tmp_path / "main.py").touch()
+    (tmp_path / "main.py").write_text("print('hello')")
 
     # Create expected output file because the command now checks for it
     output_file = tmp_path / "context.xml"
-    output_file.touch()
 
-    with patch("shutil.which", return_value="/usr/bin/repomix"), patch(
-            "subprocess.run", return_value=MagicMock(returncode=0, stderr="")
-    ) as mock_run:
-        result = runner.invoke(
-            app,
-            [
-                "generate",
-                "repomix",
-                str(selection_file),
-                "--output",
-                str(output_file),
-            ],
-        )
+    result = runner.invoke(
+        app,
+        [
+            "generate",
+            "repomix",
+            str(selection_file),
+            "--output",
+            str(output_file),
+        ],
+    )
 
     assert result.exit_code == 0
     # Strip ANSI codes for comparison
     import re
     clean_output = re.sub(r'\x1b\[[0-9;]*m', '', result.output)
     assert "Success! Context generated" in clean_output
+    
+    # Verify output file was created and contains XML
+    assert output_file.exists()
+    content = output_file.read_text()
+    assert "<repomix>" in content
+    assert "print('hello')" in content
 
-    args, kwargs = mock_run.call_args
-    cmd = args[0]
-    assert any("main.py" in part for part in cmd)
-    assert any("src/**" in part for part in cmd)
-    assert kwargs["cwd"] == Path(str(tmp_path))
 
-
-def test_generate_missing_binary(tmp_path: Path) -> None:
-    """Gracefully errors when repomix binary missing."""
-
+def test_generate_compress_option(tmp_path: Path) -> None:
+    """Test compression option works correctly."""
+    
     selection_file = tmp_path / "selection.yaml"
-    selection_file.touch()
+    data = {
+        "basePath": str(tmp_path),
+        "include": ["main.py"],
+    }
+    with selection_file.open("w") as f:
+        yaml.dump(data, f)
 
-    with patch("shutil.which", return_value=None):
-        result = runner.invoke(app, ["generate", "repomix", str(selection_file)])
+    # Create a Python file with comments and docstrings
+    (tmp_path / "main.py").write_text('''
+"""Module docstring."""
+# This is a comment
+def hello():
+    """Function docstring."""
+    print("hello")
+    return 42
+''')
 
-    assert result.exit_code == 1
-    # Strip ANSI codes for comparison
-    import re
-    clean_output = re.sub(r'\x1b\[[0-9;]*m', '', result.output)
-    assert "Error: 'repomix' not found" in clean_output
+    output_file = tmp_path / "context_compressed.xml"
+
+    result = runner.invoke(
+        app,
+        [
+            "generate",
+            "repomix",
+            str(selection_file),
+            "--output",
+            str(output_file),
+            "--compress",
+        ],
+    )
+
+    assert result.exit_code == 0
+    
+    # Verify output file was created and contains compressed content
+    assert output_file.exists()
+    content = output_file.read_text()
+    assert "<repomix>" in content
+    assert "def hello():" in content  # Function signature should be preserved
+    assert "# This is a comment" not in content  # Comments should be removed
+    assert 'print("hello")' not in content  # Implementation should be removed
 
 
 def test_generate_repomix_default_output_and_copy(tmp_path: Path) -> None:

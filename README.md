@@ -4,9 +4,9 @@ A command-line tool for selecting files from your codebase and exporting them in
 
 ## Features
 
-- **Interactive Selection TUI**: Visually pick folders/files and emit Repomix-ready YAML.
-- **Repomix Orchestration**: Run `repomix` with local selections or tag-filtered definition files.
-- **Native Exporter**: Convert a selection into Markdown/JSON/XML/YAML without Repomix.
+- **Interactive Selection TUI**: Visually pick folders/files and emit context-ready YAML.
+- **Native XML Generation**: Generate Repomix-compatible XML without external dependencies.
+- **Native Exporter**: Convert a selection into Markdown/JSON/XML/YAML.
 - **Tag Indexing**: Discover available tags across your definition files.
 - **Chat & RAG Mode**: Index selections into Qdrant and ask questions over them.
 
@@ -29,7 +29,7 @@ aicontext select start . -o dashboard.yaml
 
 Navigate with the arrow keys, press `Enter` to toggle files/folders, then save. The YAML produced under `content.basePath` and `content.include` can be reused by every other command.
 
-### 2. Generate context via Repomix
+### 2. Generate context (Native XML)
 
 ```bash
 aicontext generate repomix dashboard.yaml --output /tmp/dashboard.xml
@@ -37,7 +37,10 @@ aicontext generate repomix dashboard.yaml --output /tmp/dashboard.xml
 
 - Pass multiple YAML files to merge them.
 - Use `--copy` to place the file URI on the clipboard (requires `xclip` on Linux).
-- `--style` supports `xml` (default), `markdown`, or `plain`.
+- Use `--compress` to reduce output size by extracting essential structure.
+- `--style` supports `xml` (native implementation).
+
+**Note**: This now uses native XML generation and no longer requires the external `repomix` binary.
 
 ### 3. Discover tags and run tag-filtered generation
 
@@ -48,10 +51,10 @@ aicontext generate repomix --dir ./ai-context-definitions --tag stats --tag dash
 
 Definition files are scanned for `meta.tags`, and their `include` lists are merged automatically.
 
-### 4. Export natively (no Repomix)
+### 4. Export natively
 
 ```bash
-aicontext export export selection.yaml --output ctx.md --format markdown
+aicontext export selection.yaml --output ctx.md --format markdown
 ```
 
 The native exporter understands the same YAML schema emitted by the TUI.
@@ -71,7 +74,7 @@ Refer to [docs/rag.md](docs/rag.md) for environment setup.
 
 ## Generate workflow details
 
-### Repomix command reference
+### Native XML Generation command reference
 
 ```bash
 aicontext generate repomix <selection.yaml>... [OPTIONS]
@@ -80,10 +83,11 @@ aicontext generate repomix <selection.yaml>... [OPTIONS]
 Key options:
 
 - `--dir / --tag`: Discover selection files by scanning a directory for tags.
-- `--output/-o`: Target file (defaults to `/tmp/acm__*.xml`|`md` depending on `--style`).
-- `--style`: `xml` (default), `markdown`, or `plain`.
+- `--output/-o`: Target file (defaults to `/tmp/acm__*.xml`).
+- `--style`: `xml` (native implementation only).
+- `--compress`: Reduce output size by extracting essential structure.
 - `--copy/-c`: Copy the resulting file URI to the clipboard (Linux/xclip only).
-- `--verbose/-v`: Echo every include path and the underlying Repomix command.
+- `--verbose/-v`: Show detailed execution information.
 
 ### Tag discovery
 
@@ -91,15 +95,15 @@ Key options:
 aicontext generate tags --dir ./ai-context-definitions [-v]
 ```
 
-Prints a table of tags with file counts so you can craft meaningful `--tag` filters before invoking Repomix.
+Prints a table of tags with file counts so you can craft meaningful `--tag` filters.
 
 ### Native exporter
 
 ```bash
-aicontext export export selection.yaml --output context.md --format markdown
+aicontext export selection.yaml --output context.md --format markdown
 ```
 
-Use this path when Repomix is unavailable or when you need a quick Markdown/JSON/XML/YAML export powered entirely by Python.
+Use this when you need a quick Markdown/JSON/XML/YAML export powered entirely by Python.
 
 ---
 

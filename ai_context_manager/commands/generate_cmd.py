@@ -1,8 +1,6 @@
 # ai_context_manager/commands/generate_cmd.py
 
-"""Command to generate context via Repomix."""
-import shutil
-import subprocess
+"""Command to generate context via Repomix (native implementation)."""
 import tempfile
 from collections import Counter
 from pathlib import Path
@@ -15,9 +13,10 @@ from rich.table import Table
 from rich.tree import Tree
 
 from ..config import CLI_CONTEXT_SETTINGS
+from ..core.native_context.generator import NativeContextGenerator
 from ..utils.clipboard import copy_file_uri_to_clipboard
 
-app = typer.Typer(help="Generate context using repomix", context_settings=CLI_CONTEXT_SETTINGS)
+app = typer.Typer(help="Generate context using native XML generator", context_settings=CLI_CONTEXT_SETTINGS)
 console = Console()
 
 _METADATA_HINT_KEYS = {
@@ -342,15 +341,23 @@ def generate_repomix(
     output: Optional[Path] = typer.Option(
         None, "--output", "-o", help="Output file. Defaults to a temp file if not set."
     ),
-    style: str = typer.Option("xml", "--style", help="Repomix output style (xml, markdown, plain)"),
+    style: str = typer.Option("xml", "--style", help="Output style (xml only for now)"),
     copy: bool = typer.Option(
         False, "--copy", "-c", help="Copy the output file reference to system clipboard (requires xclip)."
     ),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed execution info and repomix output"),
+    compress: bool = typer.Option(
+        False, "--compress", help="Compress output by extracting essential structure"
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed execution info"),
 ):
     """
-    Execute repomix using selection files, or discover them via directory + tags.
+    Generate XML context using selection files, or discover them via directory + tags.
     """
+    # Validate style parameter
+    if style != "xml":
+        console.print(f"[red]Error: Only 'xml' style is currently supported.[/red]")
+        raise typer.Exit(1)
+    
     final_selection_files: List[Path] = []
 
     if selection_files:
@@ -380,10 +387,8 @@ def generate_repomix(
             console.print(f"[red]Error: {file_path} not found.[/red]")
             raise typer.Exit(1)
 
-    repomix_bin = shutil.which("repomix")
-    if not repomix_bin:
-        console.print("[red]Error: 'repomix' not found. Run: npm install -g repomix[/red]")
-        raise typer.Exit(1)
+    # Remove repomix binary dependency check - using native implementation
+    generator = NativeContextGenerator()
 
     first_data = _load_selection(final_selection_files[0])
     raw_base = _ensure_content(first_data, "basePath", final_selection_files[0])
@@ -488,50 +493,31 @@ def generate_repomix(
         console.print("[yellow]Warning: No paths found in selections.[/yellow]")
         raise typer.Exit(0)
 
-    cmd = [
-        repomix_bin,
-        "--output",
-        str(output),
-        "--style",
-        style,
-        "--include",
-        ",".join(unique_patterns),
-    ]
-
-    console.print(f"[blue]Running Repomix in {execution_root}...[/blue]")
+    console.print(f"[blue]Generating context in {execution_root}...[/blue]")
     if verbose:
-        console.print(f"[dim]Command: {' '.join(cmd)}[/dim]")
+        console.print(f"[dim]Patterns: {', '.join(unique_patterns)}[/dim]")
         console.print(f"[dim]Output target: {output}[/dim]")
 
     try:
-        result = subprocess.run(cmd, cwd=execution_root, capture_output=not verbose, text=True)
-    except Exception as exc:
-        console.print(f"[red]Execution error: {exc}[/red]")
-        raise typer.Exit(1)
-
-    if result.returncode == 0:
+        # Generate XML using native implementation
+        xml_content = generator.generate_xml(execution_root, unique_patterns, verbose, compress)
+        
+        # Write to output file
+        output.write_text(xml_content, encoding="utf-8")
+        
         # Verify output file existence
         if not output.exists():
-            console.print(f"[red]Error: Repomix reported success, but output file is missing.[/red]")
+            console.print(f"[red]Error: Failed to create output file.[/red]")
             console.print(f"Expected at: {output}")
-
-            # Fallback check: did it ignore absolute path and write relative to CWD?
-            possible_rel = execution_root / output.name
-            if possible_rel.exists():
-                console.print(f"[yellow]Found file at {possible_rel}. Using it instead.[/yellow]")
-                output = possible_rel
-            else:
-                raise typer.Exit(1)
+            raise typer.Exit(1)
 
         console.print(f"[green]Success! Context generated at: {output}[/green]")
         
-        # 3. Handle Clipboard Logic
+        # Handle Clipboard Logic
         if copy:
             if copy_file_uri_to_clipboard(output):
                 console.print(f"[bold green]File URI copied to clipboard![/bold green]")
                 console.print(f"[dim](Ready to paste into Claude/ChatGPT upload dialog)[/dim]")
-    else:
-        console.print("[red]Repomix failed.[/red]")
-        if result.stderr:
-            console.print(result.stderr)
-        raise typer.Exit(result.returncode)
+    except Exception as exc:
+        console.print(f"[red]Generation error: {exc}[/red]")
+        raise typer.Exit(1)
